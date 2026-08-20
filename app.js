@@ -63,7 +63,7 @@ function hostMessage(m){
     broadcast({type:"host_state",s:publicState()});renderHost();
   }
   if(m.type==="answer"){
-    if(state.phase!=="question")return;
+    if(state.phase!=="answers")return;
     if(!state.players[m.id]||state.answers[m.id])return;
     const elapsed=Math.max(0,Math.min(state.questionDuration*1000,Number(m.clientElapsedMs)||0));
     state.answers[m.id]={a:m.a,elapsed};
@@ -79,7 +79,7 @@ function hostMessage(m){
   if(m.type==="leave"){delete state.players[m.id];delete state.answers[m.id];broadcast({type:"host_state",s:publicState()});renderHost()}
 }
 function startQuestion(){
-  clearAnswer();
+  clearAnswerState();
   state.phase="typing";state.answers={};state.questionStartedAt=null;state.typingProgress=0;state.version++;
   broadcast({type:"host_state",s:publicState()});renderHost();soundNewQuestion();
   const text=String(questions[state.q].q||""), total=Math.max(700,text.length*38), started=now();
@@ -100,10 +100,10 @@ function showAnswers(){
 }
 function runHostCountdown(){
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
-  const loop=()=>{if(state.phase!=="question")return;const left=Math.max(0,state.questionDuration-Math.floor((now()-state.questionStartedAt)/1000));const el=$("#hostcount");if(el)el.textContent=left;if(left<=0){endQuestion();return}countdownRAF=requestAnimationFrame(loop)};loop();
+  const loop=()=>{if(state.phase!=="answers")return;const left=Math.max(0,state.questionDuration-Math.floor((now()-state.questionStartedAt)/1000));const el=$("#hostcount");if(el)el.textContent=left;if(left<=0){endQuestion();return}countdownRAF=requestAnimationFrame(loop)};loop();
 }
 function endQuestion(){
-  if(state.phase!=="question")return;
+  if(state.phase!=="answers")return;
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
   const q=questions[state.q];
   const correct=[];
@@ -159,7 +159,6 @@ function renderHost(){
   }
   $("#app").innerHTML=`<section class="panel">${body}</section>`;
   if($("#start"))$("#start").onclick=()=>{state.q=0;startQuestion()};
-  if($("#show"))$("#show").onclick=showAnswers;
   if($("#next"))$("#next").onclick=next;
   if($("#reset"))$("#reset").onclick=hostReset;
 }
@@ -197,7 +196,7 @@ function showSaved(){
 function startMobileClock(){
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
   const loop=()=>{
-    if(state.phase!=="question")return;
+    if(state.phase!=="answers")return;
     const left=Math.max(0,state.questionDuration-Math.floor((now()-state.questionStartedAt)/1000));
     const el=$("#mobilecount");if(el)el.textContent=left;
     if(left<=0){disableInputs();return}
