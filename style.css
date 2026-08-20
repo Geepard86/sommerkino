@@ -56,3 +56,9 @@ footer{text-align:center;color:#777;padding:20px}
 .icon-choice .choice-icon{font-size:24px;display:inline-block}
 .player-question{margin-bottom:12px}
 @media(max-width:700px){.phase-placeholder{gap:8px}.placeholder-answer{font-size:12px;padding:13px}.icon-choice .choice-icon{font-size:20px}}
+
+.typing-cursor{display:inline-block;width:.55em;height:1.05em;background:#000;margin-left:4px;vertical-align:-.08em;animation:blink .7s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.question-reveal{min-height:3.2em}
+.count-pulse{animation:pulse .35s ease}
+@keyframes pulse{50%{transform:scale(1.18)}}

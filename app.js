@@ -5,6 +5,14 @@ const sb=createClient(CFG.SUPABASE_URL,CFG.SUPABASE_PUBLISHABLE_KEY,{auth:{persi
 const ROOM="sommerkino:"+CFG.ROOM;
 const isHost=new URLSearchParams(location.search).get("host")===CFG.HOST_PASSWORD;
 const ICONS=["🏓","🐍","🍿","🦫","🦈","🎬","📼","📺","🛼","🪩","🍉","🕶️"];
+let audioCtx=null;
+function audioInit(){if(!isHost)return;try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==="suspended")audioCtx.resume()}catch{}}
+function tone(freq,dur=.08,delay=0,type="square",gain=.035){if(!isHost||!audioCtx)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(0,audioCtx.currentTime+delay);g.gain.linearRampToValueAtTime(gain,audioCtx.currentTime+delay+.01);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+delay+dur);o.connect(g).connect(audioCtx.destination);o.start(audioCtx.currentTime+delay);o.stop(audioCtx.currentTime+delay+dur+.02)}
+function soundNewQuestion(){audioInit();tone(440,.08);tone(660,.1,.09);tone(880,.16,.2,"square",.045)}
+function soundAnswers(){audioInit();tone(880,.07);tone(1175,.12,.08,"square",.045)}
+function soundResult(){audioInit();tone(523,.12);tone(659,.12,.12);tone(784,.16,.24);tone(1047,.28,.4,"triangle",.05)}
+function soundCountdown(n){if(n<=5&&n>0){audioInit();tone(n===1?880:520,.06)}}
+
 let questions=[],channel=null,me=null,timer=null,countdownRAF=null;
 let state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0};
 
@@ -44,7 +52,7 @@ function onMessage(m){if(isHost)hostMessage(m);else playerMessage(m)}
 
 function initHost(){channel.track({role:"host",name:"BEAMER"});renderHost();broadcast({type:"host_state",s:publicState()})}
 function publicState(){
-  return {phase:state.phase,q:state.q,questionStartedAt:state.questionStartedAt,questionDuration:state.questionDuration,
+  return {phase:state.phase,q:state.q,questionStartedAt:state.questionStartedAt,questionDuration:state.questionDuration,typingProgress:state.typingProgress||0,
     players:Object.fromEntries(Object.entries(state.players).map(([id,p])=>[id,{id:p.id,name:p.name,icon:p.icon,score:p.score,last:p.last,roundPoints:p.roundPoints,answerTime:p.answerTime}]))};
 }
 function hostMessage(m){
@@ -60,7 +68,7 @@ function hostMessage(m){
     const elapsed=Math.max(0,Math.min(state.questionDuration*1000,Number(m.clientElapsedMs)||0));
     state.answers[m.id]={a:m.a,elapsed};
     state.players[m.id].last=m.a;state.players[m.id].answerTime=elapsed;
-    if(Object.keys(state.answers).length>=Object.keys(state.players).length)endQuestion();
+    if(Object.keys(state.players).length>0 && Object.keys(state.answers).length>=Object.keys(state.players).length)endQuestion();
     broadcast({type:"answer_ok",id:m.id});
     renderHost();
   }
@@ -71,15 +79,24 @@ function hostMessage(m){
   if(m.type==="leave"){delete state.players[m.id];delete state.answers[m.id];broadcast({type:"host_state",s:publicState()});renderHost()}
 }
 function startQuestion(){
-  clearAnswerState();
-  state.phase="question";state.answers={};state.questionStartedAt=null;state.version++;
-  broadcast({type:"host_state",s:publicState()});renderHost();
+  clearAnswer();
+  state.phase="typing";state.answers={};state.questionStartedAt=null;state.typingProgress=0;state.version++;
+  broadcast({type:"host_state",s:publicState()});renderHost();soundNewQuestion();
+  const text=String(questions[state.q].q||""), total=Math.max(700,text.length*38), started=now();
+  const tick=()=>{
+    if(state.phase!=="typing")return;
+    const progress=Math.min(1,(now()-started)/total);
+    state.typingProgress=progress;
+    broadcast({type:"typing",q:state.q,progress});
+    renderHost();
+    if(progress>=1){showAnswers();return}
+    requestAnimationFrame(tick);
+  }; tick();
 }
 function showAnswers(){
-  if(state.phase!=="question")return;
-  clearAnswerState();
-  state.phase="answers";state.answers={};state.questionStartedAt=now();state.version++;
-  broadcast({type:"host_state",s:publicState()});renderHost();runHostCountdown();
+  if(state.phase!=="typing")return;
+  state.phase="answers";state.answers={};state.questionStartedAt=now();state.typingProgress=1;state.version++;
+  broadcast({type:"host_state",s:publicState()});renderHost();soundAnswers();runCountdown();
 }
 function runHostCountdown(){
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
@@ -101,7 +118,7 @@ function endQuestion(){
     state.players[x.id].score+=points;
   });
   state.phase="result";state.questionStartedAt=null;state.version++;
-  broadcast({type:"host_state",s:publicState()});renderHost();
+  broadcast({type:"host_state",s:publicState()});renderHost();soundResult();
 }
 function isCorrect(q,a){
   if(q.type==="mc"||q.type==="tf")return a===q.answer;
@@ -128,8 +145,11 @@ function renderHost(){
   let body="";
   if(state.phase==="lobby"){
     body=`<div class="hero host-stage"><h1>🎞️ SOMMERKINO<br>HOST</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p><span class="ready-chip">${players.length} SPIELER ONLINE</span></p><button class="btn lime" id="start">▶ QUIZ STARTEN</button><h2>TEILNEHMER</h2>${rows(players)}</div>`;
+  }else if(state.phase==="typing"){
+    const text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));
+    body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question question-reveal">${esc(text.slice(0,n))}<span class="typing-cursor"></span></div><div class="notice">FRAGE WIRD EINGEBLENDET …</div></div>`;
   }else if(state.phase==="question"){
-    body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question">${esc(q.q)}</div>${placeholders(q)}<button class="btn lime" id="show">ANTWORTEN ZEIGEN ▶</button></div>`;
+    body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question">${esc(q.q)}</div>${placeholders(q)}</div>`;
   }else if(state.phase==="result"){
     const correct=players.filter(p=>p.roundPoints>0).sort((a,b)=>(a.answerTime??99999)-(b.answerTime??99999));
     const podium=correct.slice(0,3).map((p,i)=>`<div class="place ${i===0?"first":i===1?"second":"third"}"><div>${["🥇","🥈","🥉"][i]}</div><b>${p.icon} ${esc(p.name)}</b><br>+${p.roundPoints} P.</div>`).join("");
@@ -138,7 +158,7 @@ function renderHost(){
     body=`<div class="hero"><h1>🏆 FILM AB!</h1>${rows(players,true)}<br><button class="btn lime" id="reset">NEUES SPIEL</button></div>`;
   }
   $("#app").innerHTML=`<section class="panel">${body}</section>`;
-  if($("#start"))$("#start").onclick=startQuestion;
+  if($("#start"))$("#start").onclick=()=>{state.q=0;startQuestion()};
   if($("#show"))$("#show").onclick=showAnswers;
   if($("#next"))$("#next").onclick=next;
   if($("#reset"))$("#reset").onclick=hostReset;
@@ -163,6 +183,7 @@ function renderWaiting(){
 }
 function playerMessage(m){
   if(m.type==="host_state"){state=m.s;renderPlayer()}
+  if(m.type==="typing"&&m.q===state.q){state.typingProgress=m.progress;renderPlayer()}
   if(m.type==="answer_ok"&&m.id===me.id)showSaved()
 }
 function sendAnswer(a){
@@ -187,8 +208,10 @@ function disableInputs(){document.querySelectorAll("button,input").forEach(x=>{i
 function renderPlayer(){
   if(state.phase==="lobby"){renderWaiting();return}
   if(state.phase==="question"){const q=questions[state.q];$("#app").innerHTML=`<section class="panel"><div class="player-question"><div class="qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="question">${esc(q.q)}</div></div>${placeholders(q)}<div class="notice">Warte auf den Beamer …</div></section>`;return}
+  if(state.phase==="typing"){const q=questions[state.q],text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));$("#app").innerHTML=`<section class="panel"><div class="player-question"><div class="qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="question question-reveal">${esc(text.slice(0,n))}<span class="typing-cursor"></span></div></div><div class="notice">FRAGE WIRD EINGEBLENDET …</div></section>`;return}
   if(state.phase==="finished"){const p=state.players[me.id];$("#app").innerHTML=`<section class="panel hero"><h1>🏆 FERTIG!</h1><p>${me.icon} ${esc(me.name)}</p><p>Dein Punktestand: <b>${p?p.score:"—"}</b></p><p>Danke fürs Mitspielen!</p></section>`;return}
   if(state.phase==="result"){const p=state.players[me.id];$("#app").innerHTML=`<section class="panel hero"><h1>🎞️ AUSWERTUNG</h1><p>${me.icon} ${esc(me.name)}</p><div class="reveal">${p?.roundPoints?`+${p.roundPoints} PUNKTE`:"Diese Runde keine Punkte"}<br>Gesamt: ${p?p.score:0}</div><p>Schau auf den Beamer für das Ranking.</p></section>`;return}
+  if(state.phase!=="answers")return;
   const q=questions[state.q],saved=savedAnswer();
   let controls="";
   if(q.type==="mc")controls=`<div class="answers">${q.options.map((o,i)=>"<button class=\"btn choice "+(saved===i?"answer-picked":"")+"\" data-a=\""+i+"\">"+String.fromCharCode(65+i)+") "+esc(o)+"</button>").join("")}</div>`;
