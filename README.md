@@ -1,26 +1,25 @@
-# Sommerkino Quiz 2000 – Supabase V3
+# Sommerkino Quiz 2000 – V4
 
-Diese Version verwendet **Supabase Realtime Broadcast + Presence** statt PeerJS.
-Dadurch braucht die Website keine eigene Peer-Verbindung und keine eigene Serverinstanz.
+Kahoot-artiger Ablauf mit Supabase Realtime.
+
+## Ablauf
+1. Host zeigt zunächst nur die Frage auf dem Beamer.
+2. Host startet die Antwortphase.
+3. Beamer + alle Handys zeigen gleichzeitig die 20 Sekunden.
+4. Spieler wählen eine Antwort.
+5. Sofort erscheint: **ANTWORT GESPEICHERT – SCHAU AUF DEN BEAMER**.
+6. Antwort wird gesperrt.
+7. Nach Ablauf: animierte Auswertung, schnellste richtige Antwort und Gesamtstand.
+8. Host klickt **NÄCHSTE FRAGE**.
+
+## Spieler-Refresh
+Name, Icon und eine stabile Spieler-ID werden in `localStorage` gespeichert. Nach einem Refresh wird der Spieler automatisch wieder mit derselben Identität angemeldet.
+
+## Punkte
+Richtige Antworten starten bei 1000 Punkten und sinken mit der Antwortzeit bis auf mindestens 100 Punkte. Falsche Antworten geben 0 Punkte.
 
 ## URLs
+Spieler: normale GitHub-Pages-URL
+Host: `?host=2026`
 
-Spieler:
-`https://DEINNAME.github.io/REPO/`
-
-Host:
-`https://DEINNAME.github.io/REPO/?host=2026`
-
-## Supabase
-
-Die Projekt-URL und der Publishable Key stehen in `config.js`.
-
-Der `sb_publishable_...` Key ist für Client-Code gedacht und darf in einer GitHub-Pages-Seite stehen. Niemals einen `sb_secret_...` oder `service_role` Key in `config.js` eintragen.
-
-## Keine SQL-Tabelle nötig
-
-Für die Quiz-Synchronisation wird Supabase Realtime verwendet. Der aktuelle Spielstand liegt im Host-Browser; Supabase verteilt Events und Presence an alle Clients.
-
-## GitHub Pages
-
-Alle Dateien des Ordners ins Repository legen und GitHub Pages auf den Branch aktivieren.
+Keine SQL-Tabelle erforderlich; Supabase Realtime Broadcast/Presence wird als Spielkanal verwendet.
