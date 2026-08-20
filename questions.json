@@ -1,0 +1,282 @@
+[
+  {
+    "type": "mc",
+    "q": "Welcher Film eröffnete das erste Sommerkino 2013?",
+    "options": [
+      "Hyde Park am Hudson",
+      "Lachsfischen im Jemen",
+      "Das gelbe Segel",
+      "The Rum Diary"
+    ],
+    "answer": 0,
+    "fact": "Der erste Film des ersten Sommerkino-Tages startete bereits um 11:00 Uhr."
+  },
+  {
+    "type": "mc",
+    "q": "Welche Sportart steht im Mittelpunkt des 2013 beim Sommerkino gezeigten „Dogtown Boys“?",
+    "options": [
+      "BMX",
+      "Snowboarden",
+      "Skateboarding",
+      "Motocross"
+    ],
+    "answer": 2,
+    "fact": "Der Film erzählt die Geschichte der Z-Boys, Surfer, die das Skateboarden in leeren Pools erfanden."
+  },
+  {
+    "type": "mc",
+    "q": "Was machen die beiden Hauptfiguren im 2014 beim Sommerkino gezeigten „Prince Avalanche“ beruflich?",
+    "options": [
+      "Sie arbeiten als Förster",
+      "Sie bauen Häuser",
+      "Sie erneuern Straßenmarkierungen",
+      "Sie reparieren Stromleitungen"
+    ],
+    "answer": 2,
+    "fact": "Eine denkbar monotone Arbeit wird zur Grundlage für einen ungewöhnlichen Roadmovie-ähnlichen Sommerfilm."
+  },
+  {
+    "type": "estimate",
+    "q": "🌙 Wie viele Stunden dauerte das Sommerkino 2014 vom ersten bis zum Ende des letzten Films?",
+    "answer": 15.5,
+    "unit": "Stunden",
+    "fact": ""
+  },
+  {
+    "type": "mc",
+    "q": "🎉 Warum war das Sommerkino 2017 besonders?",
+    "options": [
+      "Es war das erste Sommerkino mit sieben Filmen",
+      "Es war das erste Sommerkino mit Eintritt",
+      "Es kehrte nach drei Jahren Pause zurück",
+      "Es fand erstmals im Winter statt"
+    ],
+    "answer": 2
+  },
+  {
+    "type": "sort",
+    "q": "🗓️ Bringt diese Filme in die richtige Reihenfolge ihrer Sommerkino-Jahrgänge.",
+    "items": [
+      "Mud",
+      "Cocaine Bear",
+      "The Florida Project",
+      "Green Book"
+    ],
+    "answer": [
+      "Mud",
+      "The Florida Project",
+      "Green Book",
+      "Cocaine Bear"
+    ],
+    "years": "2014 → 2018 → 2019 → 2023"
+  },
+  {
+    "type": "emoji",
+    "q": "🦫☣️🌊🧟 Welcher Film lief 2017 beim Sommerkino?",
+    "answer": "Zombiber"
+  },
+  {
+    "type": "who",
+    "q": "🕵️ Wer bin ich?",
+    "hints": [
+      "Ich war 2019 beim Sommerkino dabei.",
+      "Ich bin 13 Jahre alt.",
+      "Ich beginne mit dem Skaten.",
+      "Jonah Hill hat meinen Film inszeniert."
+    ],
+    "answer": "Stevie",
+    "film": "Mid90s",
+    "fact": "Der Film ist Jonah Hills Regiedebüt und eine Liebeserklärung an die Skate- und Jugendkultur der 90er."
+  },
+  {
+    "type": "mc",
+    "q": "🔗 Was verbindet „Y tu mamá también“ (2014), „Green Book“ (2019) und „A Real Pain“ (2025)?",
+    "options": [
+      "Alle drei spielen vollständig in Mexiko",
+      "Alle drei handeln von Musikern",
+      "Eine Reise bringt die Figuren in eine neue Lebenssituation",
+      "Alle drei wurden von A24 produziert"
+    ],
+    "answer": 2,
+    "fact": "Reisen, Roadmovies und das gemeinsame Unterwegssein tauchen beim Sommerkino immer wieder als Motiv auf."
+  },
+  {
+    "type": "mc",
+    "q": "Welche Tiere stehen in verschiedenen Sommerkino-Filmen im Mittelpunkt?",
+    "options": [
+      "Hai – Bär – Wolf – Schlange",
+      "Biber – Bär – Fliege – Schlange",
+      "Bär – Hai – Biber – Wolf",
+      "Fliege – Wolf – Hai – Bär"
+    ],
+    "answer": 1
+  },
+  {
+    "type": "mc",
+    "q": "📚 Was verkaufen die Jugendlichen im 2017 beim Sommerkino gezeigten „American Honey“?",
+    "options": [
+      "Konzertkarten",
+      "Skateboards",
+      "Magazine",
+      "Versicherungen"
+    ],
+    "answer": 2,
+    "fact": "Star schließt sich einer Gruppe junger Leute an, die quer durch die USA reist."
+  },
+  {
+    "type": "mc",
+    "q": "💀 Was ist das Besondere an Daniel Radcliffes Figur im 2017 beim Sommerkino gezeigten „Swiss Army Man“?",
+    "options": [
+      "Er spielt einen Geist",
+      "Er spielt einen Serienkiller",
+      "Er spielt eine Leiche",
+      "Er spielt einen Roboter"
+    ],
+    "answer": 2,
+    "fact": "Seine Leiche Manny wird für Hank zu einem geradezu übernatürlich vielseitigen Werkzeug."
+  },
+  {
+    "type": "mc",
+    "q": "🐦 Wie nennt sich Christine in einem 2018 beim Sommerkino gezeigten Film?",
+    "options": [
+      "Birdie",
+      "Lady Bird",
+      "Lady Christine",
+      "Sparrow"
+    ],
+    "answer": 1
+  },
+  {
+    "type": "mc",
+    "q": "📷 2018 lief Kodachrome. Was ist das?",
+    "options": [
+      "Eine Kamera",
+      "Ein Tonbandformat",
+      "Ein analoger Farbfilm",
+      "Ein Projektor"
+    ],
+    "answer": 2,
+    "fact": "Der Film spielt in einer Zeit, in der die letzten verbliebenen Labore noch Kodachrome-Filme entwickeln können."
+  },
+  {
+    "type": "tf",
+    "q": "⬜ Das Quadrat im 2018 beim Sommerkino gezeigten „The Square“ soll einen geschützten Raum für Vertrauen und Fürsorge symbolisieren.",
+    "answer": true
+  },
+  {
+    "type": "mc",
+    "q": "Welchen Film dreht Tommy Wiseau in „The Disaster Artist“, der 2018 beim Sommerkino lief?",
+    "options": [
+      "Birdemic",
+      "Sharknado",
+      "The Room",
+      "Troll 2"
+    ],
+    "answer": 2,
+    "fact": "The Room gilt als einer der berühmtesten „so schlecht, dass er wieder gut ist“-Filme überhaupt."
+  },
+  {
+    "type": "tf",
+    "q": "📕 Das Green Book im 2019 beim Sommerkino gezeigten „Green Book“ war ein Reiseführer für afroamerikanische Reisende.",
+    "answer": true
+  },
+  {
+    "type": "mc",
+    "q": "Wie heißt Matthew McConaugheys Figur im 2019 beim Sommerkino gezeigten „Beach Bum“?",
+    "options": [
+      "Moondog",
+      "Moonshine",
+      "Beachboy",
+      "Sunshine"
+    ],
+    "answer": 0
+  },
+  {
+    "type": "tf",
+    "q": "📺 Im 2022 beim Sommerkino gezeigten „Beyond the Infinite Two Minutes“ kann ein Fernseher zwei Minuten in die Zukunft blicken.",
+    "answer": true
+  },
+  {
+    "type": "mc",
+    "q": "🎩 Welcher Kultfilm lief 2022 beim Sommerkino als Mitmach-Special?",
+    "options": [
+      "The Blues Brothers",
+      "The Rocky Horror Picture Show",
+      "Grease",
+      "Little Shop of Horrors"
+    ],
+    "answer": 1
+  },
+  {
+    "type": "estimate",
+    "q": "⏱️ Wie viele Minuten Film wurden beim Sommerkino seit 2013 insgesamt gezeigt?",
+    "answer": 4109,
+    "unit": "Minuten",
+    "fact": "Das sind 68 Stunden und 29 Minuten Film – also fast drei volle Tage Nonstop-Kino. Trailer, Pausen, Grillen, Quiz, After-Partys und sonstiger Sommerkino-Wahnsinn sind noch nicht mitgerechnet."
+  },
+  {
+    "type": "mc",
+    "q": "Welche überraschende Besetzung findet man bereits in „Anaconda“ von 1997, auf den das 2026er Sommerkino-Programm mit „Anaconda“ zurückblickt?",
+    "options": [
+      "Jim Carrey, Nicolas Cage und Sandra Bullock",
+      "Jennifer Lopez, Ice Cube, Jon Voight und Owen Wilson",
+      "Will Smith, Jamie Foxx und Samuel L. Jackson",
+      "Denzel Washington, Wesley Snipes und Bruce Willis"
+    ],
+    "answer": 1
+  },
+  {
+    "type": "mc",
+    "q": "🧥 Wer trug nicht die „Marty Supreme“-Jacke zu Werbezwecken?",
+    "options": [
+      "Tom Brady",
+      "Kid Cudi",
+      "Kylie & Kendall Jenner",
+      "Zendaya"
+    ],
+    "answer": 3
+  },
+  {
+    "type": "mc",
+    "q": "Was sorgte rund um „Marty Supreme“, der 2026 beim Sommerkino läuft, für Aufsehen?",
+    "options": [
+      "Ein Rap-Auftritt von Timothée Chalamet",
+      "Spekulationen, Chalamet sei EsDeeKid",
+      "Ein Rap-Duell mit Chalamet",
+      "Ein eigener Marty-Supreme-Song"
+    ],
+    "answer": 0
+  },
+  {
+    "type": "mc",
+    "q": "🟨🚪📹 Was steckt hinter der Backrooms-Referenz im Sommerkino-Trailer 2026?",
+    "options": [
+      "Eine Anspielung auf eine klassische Stephen-King-Verfilmung",
+      "Ein echtes verlassenes Hotel, das im Trailer dokumentiert wird",
+      "Eine Anspielung auf eine Creepypasta, die 2026 zum Kinohit wurde",
+      "Eine Referenz auf einen alten deutschen Horrorfilm"
+    ],
+    "answer": 2
+  },
+  {
+    "type": "mc",
+    "q": "🌴 Welcher Film erzählte 2018 in schillernden Farben von Armut direkt neben Disney World in Florida?",
+    "options": [
+      "The Florida Project",
+      "Lady Bird",
+      "The Square",
+      "Kodachrome"
+    ],
+    "answer": 0,
+    "fact": "Ein Paradebeispiel für den künstlerisch ambitionierten Mittelteil, für den das Sommerkino ebenso bekannt ist.",
+    "time": 10,
+    "category": "Historie"
+  },
+  {
+    "type": "estimate",
+    "q": "📜 Wie viele Drehbücher sollen Brendan Fraser nach seinem Oscar-Gewinn angeboten worden sein, bevor er sich für Rental Family entschied?",
+    "answer": 70,
+    "unit": "Drehbücher",
+    "fact": "Er wählte gezielt eine kleine, persönliche Geschichte statt eines großen Blockbusters."
+  }
+]
