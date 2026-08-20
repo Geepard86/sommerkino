@@ -49,3 +49,10 @@ footer{text-align:center;color:#777;padding:20px}
 .host-count{font:62px 'Press Start 2P';color:var(--pink);text-align:center;margin:15px}
 .ready-chip{display:inline-block;padding:7px 10px;background:#000;color:var(--lime);border:3px solid #000}
 @media(max-width:700px){.mobile-top{margin:-2px -2px 12px}.mobile-top .count{font-size:21px}.saved-banner{font-size:11px}.podium{grid-template-columns:1fr}.host-stage .question{font-size:20px}}
+
+.phase-placeholder{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
+.placeholder-answer{border:4px dashed #555;background:#d8ccb0;color:#555;padding:18px;font:18px 'Press Start 2P';text-align:center;min-height:60px;display:flex;align-items:center;justify-content:center}
+.icon-choice{font-size:18px!important;line-height:1.2!important;min-height:54px!important;padding:10px!important}
+.icon-choice .choice-icon{font-size:24px;display:inline-block}
+.player-question{margin-bottom:12px}
+@media(max-width:700px){.phase-placeholder{gap:8px}.placeholder-answer{font-size:12px;padding:13px}.icon-choice .choice-icon{font-size:20px}}

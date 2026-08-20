@@ -1,25 +1,11 @@
-# Sommerkino Quiz 2000 – V4
+# Sommerkino Quiz 2000 – V5
 
-Kahoot-artiger Ablauf mit Supabase Realtime.
+Pro Frage gibt es jetzt zwei Phasen:
+1. Frage auf Beamer und Handy; bei Multiple Choice nur A–D Platzhalter.
+2. Host klickt **ANTWORTEN ZEIGEN**.
+3. Antworten erscheinen auf Beamer und Handy; der gemeinsame 20-Sekunden-Countdown startet.
+4. Spieler antworten einmalig; danach erscheint sofort „ANTWORT GESPEICHERT – SCHAU AUF DEN BEAMER“.
+5. Auswertung und animiertes Ranking.
+6. Host klickt **NÄCHSTE FRAGE**.
 
-## Ablauf
-1. Host zeigt zunächst nur die Frage auf dem Beamer.
-2. Host startet die Antwortphase.
-3. Beamer + alle Handys zeigen gleichzeitig die 20 Sekunden.
-4. Spieler wählen eine Antwort.
-5. Sofort erscheint: **ANTWORT GESPEICHERT – SCHAU AUF DEN BEAMER**.
-6. Antwort wird gesperrt.
-7. Nach Ablauf: animierte Auswertung, schnellste richtige Antwort und Gesamtstand.
-8. Host klickt **NÄCHSTE FRAGE**.
-
-## Spieler-Refresh
-Name, Icon und eine stabile Spieler-ID werden in `localStorage` gespeichert. Nach einem Refresh wird der Spieler automatisch wieder mit derselben Identität angemeldet.
-
-## Punkte
-Richtige Antworten starten bei 1000 Punkten und sinken mit der Antwortzeit bis auf mindestens 100 Punkte. Falsche Antworten geben 0 Punkte.
-
-## URLs
-Spieler: normale GitHub-Pages-URL
-Host: `?host=2026`
-
-Keine SQL-Tabelle erforderlich; Supabase Realtime Broadcast/Presence wird als Spielkanal verwendet.
+Die Spieler-Icons werden nur einmal und einheitlich klein angezeigt.

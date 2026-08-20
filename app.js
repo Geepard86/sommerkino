@@ -72,9 +72,14 @@ function hostMessage(m){
 }
 function startQuestion(){
   clearAnswerState();
-  state.phase="question";state.answers={};state.questionDuration=20;state.questionStartedAt=now();state.version++;
+  state.phase="question";state.answers={};state.questionStartedAt=null;state.version++;
   broadcast({type:"host_state",s:publicState()});renderHost();
-  runHostCountdown();
+}
+function showAnswers(){
+  if(state.phase!=="question")return;
+  clearAnswerState();
+  state.phase="answers";state.answers={};state.questionStartedAt=now();state.version++;
+  broadcast({type:"host_state",s:publicState()});renderHost();runHostCountdown();
 }
 function runHostCountdown(){
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
@@ -113,13 +118,18 @@ function hostReset(){state={phase:"lobby",q:0,players:{},answers:{},questionStar
 function solution(q){if(q.type==="mc")return esc(q.options[q.answer]);if(q.type==="tf")return q.answer?"WAHR":"FALSCH";if(q.type==="sort")return q.answer.map(esc).join(" → ");return esc(String(q.answer)+(q.unit?" "+q.unit:""))}
 function ranking(){return Object.values(state.players).sort((a,b)=>b.score-a.score)}
 
+function placeholders(q){
+  if(q.type==="mc")return `<div class="phase-placeholder">${[0,1,2,3].map(i=>`<div class="placeholder-answer">${String.fromCharCode(65+i)} · · ·</div>`).join("")}</div>`;
+  if(q.type==="tf")return `<div class="phase-placeholder"><div class="placeholder-answer">WAHR · · ·</div><div class="placeholder-answer">FALSCH · · ·</div></div>`;
+  return `<div class="notice">Die Eingabe wird gleich freigegeben.</div>`;
+}
 function renderHost(){
   const players=ranking(),q=questions[state.q];
   let body="";
   if(state.phase==="lobby"){
     body=`<div class="hero host-stage"><h1>🎞️ SOMMERKINO<br>HOST</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p><span class="ready-chip">${players.length} SPIELER ONLINE</span></p><button class="btn lime" id="start">▶ QUIZ STARTEN</button><h2>TEILNEHMER</h2>${rows(players)}</div>`;
   }else if(state.phase==="question"){
-    body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question">${esc(q.q)}</div><div class="host-count" id="hostcount">20</div><div class="notice">${Object.keys(state.answers).length} / ${players.length} Antworten eingegangen</div></div>`;
+    body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question">${esc(q.q)}</div>${placeholders(q)}<button class="btn lime" id="show">ANTWORTEN ZEIGEN ▶</button></div>`;
   }else if(state.phase==="result"){
     const correct=players.filter(p=>p.roundPoints>0).sort((a,b)=>(a.answerTime??99999)-(b.answerTime??99999));
     const podium=correct.slice(0,3).map((p,i)=>`<div class="place ${i===0?"first":i===1?"second":"third"}"><div>${["🥇","🥈","🥉"][i]}</div><b>${p.icon} ${esc(p.name)}</b><br>+${p.roundPoints} P.</div>`).join("");
@@ -129,6 +139,7 @@ function renderHost(){
   }
   $("#app").innerHTML=`<section class="panel">${body}</section>`;
   if($("#start"))$("#start").onclick=startQuestion;
+  if($("#show"))$("#show").onclick=showAnswers;
   if($("#next"))$("#next").onclick=next;
   if($("#reset"))$("#reset").onclick=hostReset;
 }
@@ -175,6 +186,7 @@ function startMobileClock(){
 function disableInputs(){document.querySelectorAll("button,input").forEach(x=>{if(x.dataset.a||x.id==="send"||x.classList.contains("sortitem"))x.disabled=true})}
 function renderPlayer(){
   if(state.phase==="lobby"){renderWaiting();return}
+  if(state.phase==="question"){const q=questions[state.q];$("#app").innerHTML=`<section class="panel"><div class="player-question"><div class="qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="question">${esc(q.q)}</div></div>${placeholders(q)}<div class="notice">Warte auf den Beamer …</div></section>`;return}
   if(state.phase==="finished"){const p=state.players[me.id];$("#app").innerHTML=`<section class="panel hero"><h1>🏆 FERTIG!</h1><p>${me.icon} ${esc(me.name)}</p><p>Dein Punktestand: <b>${p?p.score:"—"}</b></p><p>Danke fürs Mitspielen!</p></section>`;return}
   if(state.phase==="result"){const p=state.players[me.id];$("#app").innerHTML=`<section class="panel hero"><h1>🎞️ AUSWERTUNG</h1><p>${me.icon} ${esc(me.name)}</p><div class="reveal">${p?.roundPoints?`+${p.roundPoints} PUNKTE`:"Diese Runde keine Punkte"}<br>Gesamt: ${p?p.score:0}</div><p>Schau auf den Beamer für das Ranking.</p></section>`;return}
   const q=questions[state.q],saved=savedAnswer();
