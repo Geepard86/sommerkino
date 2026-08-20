@@ -1,22 +1,26 @@
-# Sommerkino Quiz 2000
+# Sommerkino Quiz 2000 – Version 2
 
-Statische Kahoot-ähnliche Quiz-Website für GitHub Pages.
+## URLs
 
-## Architektur
-- **Kein eigener Server nötig:** Der Beamer ist der Host.
-- **Synchronisation:** Browser-zu-Browser über PeerJS.
-- **Raum:** `SOMMERKINO-2026` (in `app.js` ändern, falls gewünscht).
-- **Fragen:** `questions.json` – leicht editierbar.
-- **Design:** VHS/Video-Store/Arcade-Ästhetik der 2000er.
+**Spieler:** normale GitHub-Pages-URL  
+**Host/Beamer:** dieselbe URL mit `?host=2026`
 
-## Start
-1. Alle Dateien in ein GitHub-Repository laden.
-2. GitHub → Settings → Pages → Deploy from branch → `main` / `/root`.
-3. Die URL öffnen.
-4. Auf dem Beamer **BEAMER / HOST** drücken.
-5. Auf den Handys dieselbe URL öffnen und Namen/Icon wählen.
+Beispiel:
+`https://DEINNAME.github.io/REPO/?host=2026`
 
-## Wichtiger Hinweis
-n:point ist für diesen Anwendungsfall nicht ideal: Laut aktueller Doku ist es primär ein GET-basierter JSON-Speicher; API-Schreibzugriffe sind weiterhin private beta und n:point bezeichnet sich selbst nicht als vollständiges Backend. Für die reine Quiz-Synchronisation übernimmt deshalb der Beamer die Rolle des Servers. citeturn0search0
+Der Host-Modus ist damit komplett von der Spieleroberfläche getrennt.
 
-Wenn du später echtes Reconnect, persistente Räume, Moderations-Login oder mehrere parallele Räume brauchst, wäre eine kleine Realtime-Datenbank (z. B. Supabase/Firebase) die robustere nächste Stufe.
+## Ablauf
+
+1. GitHub Pages aktivieren.
+2. Auf dem Beamer die Host-URL öffnen.
+3. Spieler öffnen die normale URL.
+4. Namen + Icon auswählen.
+5. Host startet das Quiz.
+6. Antworten werden live an den Host übertragen.
+
+Der Beamer ist weiterhin der zentrale Spielserver; es wird keine Datenbank benötigt.
+
+## Hinweis
+
+Für einen öffentlichen Einsatz mit vielen Geräten sollte die Verbindung vorher mit dem tatsächlichen WLAN getestet werden. PeerJS übernimmt die Peer-to-Peer-Verbindung; bei Verbindungsabbruch versucht die Spieler-Seite automatisch einen Reconnect.
