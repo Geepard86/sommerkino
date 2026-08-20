@@ -133,17 +133,17 @@ function renderHost(){
   if($("#reset"))$("#reset").onclick=hostReset;
 }
 function rows(players,bars=false){
-  return players.map((p,i)=>`<div class="row"><span class="rank">${i+1}.</span><span>${p.icon} ${esc(p.name)}</span><span class="score">${p.score}</span></div>${bars?`<div class="barline"><i style="--w:${Math.min(100,Math.max(3,p.score/Math.max(1,(players[0]?.score||1))*100))}%"></i></div>`:""}).join("")||"<p>Noch niemand da.</p>";
+  return players.map((p,i)=>{ let html="<div class=\"row\"><span class=\"rank\">"+(i+1)+".</span><span>"+p.icon+" "+esc(p.name)+"</span><span class=\"score\">"+p.score+"</span></div>"; if(bars){ const w=Math.min(100,Math.max(3,p.score/Math.max(1,(players[0]?.score||1))*100)); html+="<div class=\"barline\"><i style=\"--w:"+w+"%\"></i></div>";} return html; }).join("")||"<p>Noch niemand da.</p>";
 }
-
 function renderJoinOrReconnect(){
   const saved=playerStorage();
   if(saved?.id&&saved?.name){me=saved;joined=true;channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});broadcast({type:"reconnect",p:me});renderWaiting()}
   else renderJoin();
 }
 function renderJoin(){
-  $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME"><p>Dein Film-Maskottchen:</p><div class="grid">${ICONS.map((i,n)=>`<button class="btn ${n===2?"pink":""}" data-icon="${i}"><span class="icon">${i}</span>${i}</button>`).join("")}</div><br><button class="btn lime" id="join">▶ BEITRETEN</button></section>`;
   let selected="🍿";
+  const iconButtons=ICONS.map((i,n)=>'<button class="btn '+(n===2?"pink":"")+'" data-icon="'+i+'"><span class="icon">'+i+'</span>'+i+'</button>').join("");
+  $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME"><p>Dein Film-Maskottchen:</p><div class="grid">${iconButtons}</div><br><button class="btn lime" id="join">▶ BEITRETEN</button></section>`;
   document.querySelectorAll("[data-icon]").forEach(b=>b.onclick=()=>{selected=b.dataset.icon;document.querySelectorAll("[data-icon]").forEach(x=>x.classList.remove("pink"));b.classList.add("pink")});
   $("#join").onclick=async()=>{const name=$("#name").value.trim();if(!name)return;me={id:crypto.randomUUID(),name,icon:selected};savePlayer();joined=true;await channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});await broadcast({type:"join",p:me});renderWaiting()};
 }
@@ -179,11 +179,11 @@ function renderPlayer(){
   if(state.phase==="result"){const p=state.players[me.id];$("#app").innerHTML=`<section class="panel hero"><h1>🎞️ AUSWERTUNG</h1><p>${me.icon} ${esc(me.name)}</p><div class="reveal">${p?.roundPoints?`+${p.roundPoints} PUNKTE`:"Diese Runde keine Punkte"}<br>Gesamt: ${p?p.score:0}</div><p>Schau auf den Beamer für das Ranking.</p></section>`;return}
   const q=questions[state.q],saved=savedAnswer();
   let controls="";
-  if(q.type==="mc")controls=`<div class="answers">${q.options.map((o,i)=>`<button class="btn choice ${saved===i?"answer-picked":""}" data-a="${i}">${String.fromCharCode(65+i)}) ${esc(o)}</button>`).join("")}</div>`;
+  if(q.type==="mc")controls=`<div class="answers">${q.options.map((o,i)=>"<button class=\"btn choice "+(saved===i?"answer-picked":"")+"\" data-a=\""+i+"\">"+String.fromCharCode(65+i)+") "+esc(o)+"</button>").join("")}</div>`;
   if(q.type==="tf")controls=`<div class="answers"><button class="btn choice ${saved===true?"answer-picked":""}" data-a="true">WAHR</button><button class="btn choice ${saved===false?"answer-picked":""}" data-a="false">FALSCH</button></div>`;
   if(q.type==="estimate")controls=`<input id="answer" type="number" step="0.1" placeholder="${q.unit||"Wert"}"><button class="btn lime" id="send">ABSENDEN</button>`;
   if(q.type==="emoji")controls=`<input id="answer" placeholder="FILMTITEL"><button class="btn lime" id="send">ABSENDEN</button>`;
-  if(q.type==="who")controls=`<div>${q.hints.map((h,i)=>`<p class="small">Hinweis ${i+1}: ${esc(h)}</p>`).join("")}</div><input id="answer" placeholder="WER BIN ICH?"><button class="btn lime" id="send">ABSENDEN</button>`;
+  if(q.type==="who")controls=`<div>${q.hints.map((h,i)=>"<p class=\"small\">Hinweis "+(i+1)+": "+esc(h)+"</p>").join("")}</div><input id="answer" placeholder="WER BIN ICH?"><button class="btn lime" id="send">ABSENDEN</button>`;
   if(q.type==="sort")controls=`<div id="sortlist"></div><button class="btn lime" id="send">REIHENFOLGE ABSENDEN</button>`;
   $("#app").innerHTML=`<section class="panel"><div class="mobile-top"><span>⏱️ ZEIT</span><span class="count" id="mobilecount">20</span></div><div class="qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="question">${esc(q.q)}</div>${controls}</section>`;
   if(saved!==undefined)showSaved();
