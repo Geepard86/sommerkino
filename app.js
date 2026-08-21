@@ -340,7 +340,7 @@ function renderHost(){
   const players=ranking(),q=questions[state.q];
   let body="";
   if(state.phase==="lobby"){
-    body=`<div class="hero host-stage"><h1>🎞️ SOMMERKINO<br>HOST</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><div class="host-qr"><img src="qr.png" alt="QR-Code zum Beitreten"><small>Mit dem Handy scannen und beitreten</small></div><p><span class="ready-chip">${players.length} SPIELER ONLINE</span></p><button class="btn lime" id="start">▶ QUIZ STARTEN</button><h2>TEILNEHMER</h2>${rows(players)}</div>`;
+    body=`<div class="hero host-stage"><h1>🎞️ SOMMERKINO QUIZ 🎞️</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><div class="host-qr"><img src="qr.png" alt="QR-Code zum Beitreten"><small>Mit dem Handy scannen und beitreten</small></div><p><span class="ready-chip">${players.length} SPIELER ONLINE</span></p><button class="btn lime" id="start">▶ QUIZ STARTEN</button><h2>TEILNEHMER</h2>${rows(players)}</div>`;
   }else if(state.phase==="typing"){
     const text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));
     body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question question-reveal">${esc(text.slice(0,n))}<span class="typing-cursor"></span></div><div class="notice">FRAGE WIRD EINGEBLENDET …</div></div>`;
