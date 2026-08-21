@@ -19,7 +19,14 @@ function soundCountdown(n){if(n<=5&&n>0){audioInit();tone(n===1?880:520,.06)}}
 function genGameId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
 
 let questions=[],channel=null,me=null,timer=null,countdownRAF=null;
-let state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId()};
+let state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId(),ceremonyStep:0};
+// Ausgleich zwischen der Host-Systemuhr und der Uhr dieses Geräts (behebt einen leicht
+// asynchronen Countdown, wenn beide Geräte nicht exakt dieselbe Uhrzeit haben).
+let clockOffset=null;
+// Verhindert, dass während der Antwortphase eingehende host_state-Updates (z.B. weil ein
+// anderer Spieler geantwortet hat) den kompletten Bildschirm neu aufbauen und damit eine
+// laufende Drag&Drop-Sortierung oder Texteingabe zerstören.
+let lastRenderedKey=null;
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -42,6 +49,7 @@ async function boot(){
     channel.on("presence",{event:"leave"},()=>onPresence());
     await subscribe();
     if(isHost)initHost();else renderJoinOrReconnect();
+    initResync();
   }catch(e){showError(e)}
 }
 async function subscribe(){
@@ -56,9 +64,41 @@ function onPresence(){}
 async function broadcast(payload){await channel.send({type:"broadcast",event:"sommerkino",payload})}
 function onMessage(m){if(isHost)hostMessage(m);else playerMessage(m)}
 
+// V8: Wenn das Handy gesperrt/im Hintergrund war und die Realtime-Verbindung dadurch
+// eingeschlafen ist, sorgt dies dafür, dass beim Zurückkommen automatisch neu synchronisiert
+// wird - ohne dass der Spieler etwas tun muss. Als letzte Absicherung wird neu geladen, was
+// dank der gespeicherten Spieler-Identität (localStorage) zuverlässig zum selben Punkt zurückführt.
+function initResync(){
+  let lastResyncAt=0;
+  function resync(){
+    const t=now();
+    if(t-lastResyncAt<800)return;
+    lastResyncAt=t;
+    if(!channel)return;
+    if(channel.state==="joined"){afterResync();return}
+    status("RECONNECTING");
+    let settled=false;
+    const fallback=setTimeout(()=>{if(!settled)location.reload()},4000);
+    try{
+      channel.subscribe(s=>{
+        if(s==="SUBSCRIBED"){settled=true;clearTimeout(fallback);status("ONLINE");afterResync()}
+        else if(s==="CHANNEL_ERROR"||s==="TIMED_OUT"){settled=true;clearTimeout(fallback);location.reload()}
+      });
+    }catch{location.reload()}
+  }
+  function afterResync(){
+    if(isHost){broadcast({type:"host_state",s:publicState()})}
+    else if(me){channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});broadcast({type:"reconnect",p:me})}
+  }
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")resync()});
+  window.addEventListener("pageshow",e=>{if(e.persisted)resync()});
+  window.addEventListener("focus",()=>resync());
+  window.addEventListener("online",()=>resync());
+}
+
 function initHost(){channel.track({role:"host",name:"BEAMER"});renderHost();broadcast({type:"host_state",s:publicState()})}
 function publicState(){
-  return {phase:state.phase,q:state.q,questionStartedAt:state.questionStartedAt,questionDuration:state.questionDuration,typingProgress:state.typingProgress||0,gameId:state.gameId,
+  return {phase:state.phase,q:state.q,questionStartedAt:state.questionStartedAt,questionDuration:state.questionDuration,typingProgress:state.typingProgress||0,gameId:state.gameId,ceremonyStep:state.ceremonyStep||0,hostNow:now(),
     players:Object.fromEntries(Object.entries(state.players).map(([id,p])=>[id,{id:p.id,name:p.name,icon:p.icon,score:p.score,last:p.last,roundPoints:p.roundPoints,answerTime:p.answerTime}]))};
 }
 function hostMessage(m){
@@ -127,17 +167,30 @@ function endQuestion(){
   if(state.phase!=="answers")return;
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
   const q=questions[state.q];
-  const correct=[];
-  Object.entries(state.answers).forEach(([id,x])=>{
-    if(isCorrect(q,x.a))correct.push({id,elapsed:x.elapsed});
-  });
-  correct.sort((a,b)=>a.elapsed-b.elapsed);
   Object.values(state.players).forEach(p=>p.roundPoints=0);
-  correct.forEach((x,i)=>{
-    const points=Math.max(100,1000-Math.round(x.elapsed/1000)*45);
-    state.players[x.id].roundPoints=points;
-    state.players[x.id].score+=points;
-  });
+  if(q.type==="estimate"){
+    // Schätzfragen: wer am nächsten dran ist, bekommt die meisten Punkte, danach in
+    // Abstufungen (150 Punkte weniger pro Rang, Minimum 100), bei Gleichstand entscheidet
+    // die schnellere Antwortzeit.
+    const entries=Object.entries(state.answers)
+      .filter(([id,x])=>typeof x.a==="number"&&!Number.isNaN(x.a))
+      .map(([id,x])=>({id,diff:Math.abs(x.a-Number(q.answer)),elapsed:x.elapsed}));
+    entries.sort((a,b)=>a.diff-b.diff||a.elapsed-b.elapsed);
+    entries.forEach((x,i)=>{
+      const points=Math.max(100,1000-i*150);
+      state.players[x.id].roundPoints=points;
+      state.players[x.id].score+=points;
+    });
+  }else{
+    const correct=[];
+    Object.entries(state.answers).forEach(([id,x])=>{if(isCorrect(q,x.a))correct.push({id,elapsed:x.elapsed})});
+    correct.sort((a,b)=>a.elapsed-b.elapsed);
+    correct.forEach((x,i)=>{
+      const points=Math.max(100,1000-Math.round(x.elapsed/1000)*45);
+      state.players[x.id].roundPoints=points;
+      state.players[x.id].score+=points;
+    });
+  }
   state.phase="result";state.questionStartedAt=null;state.version++;
   broadcast({type:"host_state",s:publicState()});renderHost();soundResult();
 }
@@ -149,14 +202,23 @@ function isCorrect(q,a){
   return false;
 }
 function next(){
-  if(state.q>=questions.length-1){state.phase="finished";broadcast({type:"host_state",s:publicState()});renderHost();return}
+  if(state.q>=questions.length-1){state.phase="finished";state.ceremonyStep=0;broadcast({type:"host_state",s:publicState()});renderHost();return}
   state.q++;startQuestion();
 }
 function hostReset(){
-  state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId()};
+  state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId(),ceremonyStep:0};
   broadcast({type:"reset_game"});
   broadcast({type:"host_state",s:publicState()});
   renderHost();
+}
+function ceremonyNext(){
+  const players=ranking();
+  const slotsCount=[players[2],players[1],players[0]].filter(Boolean).length;
+  if((state.ceremonyStep||0)<slotsCount){
+    state.ceremonyStep=(state.ceremonyStep||0)+1;
+    broadcast({type:"host_state",s:publicState()});
+    renderHost();soundResult();
+  }
 }
 function solution(q){if(q.type==="mc")return esc(q.options[q.answer]);if(q.type==="tf")return q.answer?"WAHR":"FALSCH";if(q.type==="sort")return q.answer.map(esc).join(" → ");return esc(String(q.answer)+(q.unit?" "+q.unit:""))}
 function ranking(){return Object.values(state.players).sort((a,b)=>b.score-a.score)}
@@ -169,8 +231,11 @@ function answerAreaHtml(q,interactive){
   if(q.type==="estimate")return `<div class="answer-input-row"><input id="answer" type="number" step="0.1" placeholder="${esc(q.unit||"Wert")}" ${dis}>${interactive?'<button class="btn lime" id="send">ABSENDEN</button>':""}</div>`;
   if(q.type==="emoji")return `<div class="answer-input-row"><input id="answer" placeholder="FILMTITEL" ${dis}>${interactive?'<button class="btn lime" id="send">ABSENDEN</button>':""}</div>`;
   if(q.type==="who")return `<div class="hints">${q.hints.map((h,i)=>`<p class="small">Hinweis ${i+1}: ${esc(h)}</p>`).join("")}</div><div class="answer-input-row"><input id="answer" placeholder="WER BIN ICH?" ${dis}>${interactive?'<button class="btn lime" id="send">ABSENDEN</button>':""}</div>`;
-  if(q.type==="sort")return `<div id="sortlist" class="sortlist"></div>${interactive?'<button class="btn lime" id="send">REIHENFOLGE ABSENDEN</button>':""}`;
+  if(q.type==="sort")return `<div id="sortlist" class="sortlist">${interactive?"":sortListHtml(q.items,false)}</div>${interactive?'<button class="btn lime" id="send">REIHENFOLGE ABSENDEN</button>':""}`;
   return "";
+}
+function sortListHtml(items,interactive){
+  return items.map((x,i)=>`<div class="sortitem" data-i="${i}">${interactive?'<span class="sort-handle">☰</span>':''}<span class="sort-num">${i+1}.</span><span class="sort-label">${esc(x)}</span></div>`).join("");
 }
 function placeholders(q){
   if(q.type==="mc")return `<div class="phase-placeholder">${[0,1,2,3].map(i=>`<div class="placeholder-answer">${String.fromCharCode(65+i)} · · ·</div>`).join("")}</div>`;
@@ -189,16 +254,30 @@ function renderHost(){
     const total=Object.keys(state.players).length,answered=Object.keys(state.answers).length;
     body=`<div class="host-stage"><div class="answers-top"><span class="small">FRAGE ${state.q+1} / ${questions.length}</span><span class="host-count" id="hostcount">${state.questionDuration}</span></div><div class="question">${esc(q.q)}</div>${answerAreaHtml(q,false)}<p><span class="ready-chip">${answered} / ${total} GEANTWORTET</span></p></div>`;
   }else if(state.phase==="result"){
-    const correct=players.filter(p=>p.roundPoints>0).sort((a,b)=>(a.answerTime??99999)-(b.answerTime??99999));
-    const podium=correct.slice(0,3).map((p,i)=>`<div class="place ${i===0?"first":i===1?"second":"third"}"><div>${["🥇","🥈","🥉"][i]}</div><b>${p.icon} ${esc(p.name)}</b><br>+${p.roundPoints} P.</div>`).join("");
-    body=`<div class="hero"><div class="small">AUSWERTUNG • FRAGE ${state.q+1}</div><div class="reveal">RICHTIGE ANTWORT<br>${solution(q)}</div><div class="podium">${podium||"<div class='place first'>Keine richtige Antwort</div>"}</div><h2>GESAMTSTAND</h2><div class="result-list">${rows(players,true)}</div><br><button class="btn lime" id="next">${state.q===questions.length-1?"ENDSTAND":"NÄCHSTE FRAGE"} ▶</button></div>`;
+    const scorers=players.filter(p=>p.roundPoints>0).sort((a,b)=>b.roundPoints-a.roundPoints);
+    const podium=scorers.slice(0,3).map((p,i)=>`<div class="place ${i===0?"first":i===1?"second":"third"}"><div>${["🥇","🥈","🥉"][i]}</div><b>${p.icon} ${esc(p.name)}</b><br>+${p.roundPoints} P.</div>`).join("");
+    body=`<div class="hero"><div class="small">AUSWERTUNG • FRAGE ${state.q+1}</div><div class="reveal">RICHTIGE ANTWORT<br>${solution(q)}</div>${q.fact?`<div class="fact">💡 ${esc(q.fact)}</div>`:""}<div class="podium">${podium||"<div class='place first'>Keine richtige Antwort</div>"}</div><h2>GESAMTSTAND</h2><div class="result-list">${rows(players,true)}</div><br><button class="btn lime" id="next">${state.q===questions.length-1?"ENDSTAND":"NÄCHSTE FRAGE"} ▶</button></div>`;
   }else{
-    body=`<div class="hero"><h1>🏆 FILM AB!</h1>${rows(players,true)}<br><button class="btn lime" id="reset">NEUES SPIEL</button></div>`;
+    // V8: Siegerehrung - erst Dritter, dann Zweiter, dann Erster wird enthüllt
+    const slots=[];
+    if(players[2])slots.push({p:players[2],rank:3,cls:"third",medal:"🥉"});
+    if(players[1])slots.push({p:players[1],rank:2,cls:"second",medal:"🥈"});
+    if(players[0])slots.push({p:players[0],rank:1,cls:"first",medal:"🥇"});
+    const step=Math.min(state.ceremonyStep||0,slots.length);
+    const boxes=slots.map((s,i)=>`<div class="cplace ${s.cls} ${i<step?"revealed":""}">${i<step?`<span class="rank-label">${s.medal} PLATZ ${s.rank}</span><b>${s.p.icon} ${esc(s.p.name)}</b><br>${s.p.score} PUNKTE`:`<span class="rank-label">PLATZ ${s.rank}</span>???`}</div>`).join("");
+    if(slots.length===0){
+      body=`<div class="hero"><h1>🏆 FILM AB!</h1><p>Noch niemand da.</p><br><button class="btn lime" id="reset">NEUES SPIEL</button></div>`;
+    }else if(step<slots.length){
+      body=`<div class="hero host-stage"><h1>🏆 SIEGEREHRUNG</h1><div class="ceremony">${boxes}</div><button class="btn lime" id="ceremonyNext">${slots[step].medal} PLATZ ${slots[step].rank} ENTHÜLLEN ▶</button></div>`;
+    }else{
+      body=`<div class="hero"><h1>🎉 HERZLICHEN GLÜCKWUNSCH!</h1><div class="ceremony">${boxes}</div><h2>GESAMTSTAND</h2>${rows(players,true)}<br><button class="btn lime" id="reset">NEUES SPIEL</button></div>`;
+    }
   }
   $("#app").innerHTML=`<section class="panel">${body}</section>`;
   if($("#start"))$("#start").onclick=()=>{state.q=0;startQuestion()};
   if($("#next"))$("#next").onclick=next;
   if($("#reset"))$("#reset").onclick=hostReset;
+  if($("#ceremonyNext"))$("#ceremonyNext").onclick=ceremonyNext;
 }
 function rows(players,bars=false){
   return players.map((p,i)=>{ let html="<div class=\"row\"><span class=\"rank\">"+(i+1)+".</span><span>"+p.icon+" "+esc(p.name)+"</span><span class=\"score\">"+p.score+"</span></div>"; if(bars){ const w=Math.min(100,Math.max(3,p.score/Math.max(1,(players[0]?.score||1))*100)); html+="<div class=\"barline\"><i style=\"--w:"+w+"%\"></i></div>";} return html; }).join("")||"<p>Noch niemand da.</p>";
@@ -210,31 +289,55 @@ function renderJoinOrReconnect(){
 }
 function renderJoin(){
   let selected="🍿";
-  const iconButtons=ICONS.map((i,n)=>'<button class="btn '+(n===2?"pink":"")+'" data-icon="'+i+'"><span class="icon">'+i+'</span>'+i+'</button>').join("");
+  const iconButtons=ICONS.map((i,n)=>'<button class="btn icon-btn '+(n===2?"pink":"")+'" data-icon="'+i+'"><span class="icon">'+i+'</span></button>').join("");
   $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME"><p>Dein Film-Maskottchen:</p><div class="grid">${iconButtons}</div><br><button class="btn lime" id="join">▶ BEITRETEN</button></section>`;
   document.querySelectorAll("[data-icon]").forEach(b=>b.onclick=()=>{selected=b.dataset.icon;document.querySelectorAll("[data-icon]").forEach(x=>x.classList.remove("pink"));b.classList.add("pink")});
   $("#join").onclick=async()=>{const name=$("#name").value.trim();if(!name)return;me={id:crypto.randomUUID(),name,icon:selected,gameId:state.gameId};savePlayer();await channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});await broadcast({type:"join",p:me})};
+  updateHeaderReset();
 }
 function resetPlayerIdentity(){
   if(me)broadcast({type:"leave",id:me.id});
-  forgetPlayer();me=null;renderJoin();
+  forgetPlayer();me=null;lastRenderedKey=null;renderJoin();
+}
+function confirmReset(){
+  if(confirm("Wirklich neu anmelden? Dein aktueller Punktestand auf diesem Gerät geht dabei verloren."))resetPlayerIdentity();
+}
+// V8: der "Neu anmelden"-Link sitzt jetzt dezent oben in der Kopfleiste (statt als großer
+// Button je Screen) und fragt vor dem Zurücksetzen nach Bestätigung.
+function updateHeaderReset(){
+  const btn=document.getElementById("headerReset");
+  if(!btn)return;
+  if(!isHost&&me){btn.hidden=false;btn.onclick=confirmReset}
+  else btn.hidden=true;
 }
 function renderWaiting(){
-  $("#app").innerHTML=`<section class="panel hero"><h1>✓ DU BIST DRIN!</h1><div class="room">${me.icon} ${esc(me.name)}</div><p>Warte auf den Beamer …</p><div class="notice">Deine Anmeldung bleibt auch nach einem Refresh erhalten.</div><button class="btn dark reset-link" id="reidentify">🔄 Nicht ich? Neu anmelden</button></section>`;
-  $("#reidentify").onclick=resetPlayerIdentity;
+  $("#app").innerHTML=`<section class="panel hero"><h1>✓ DU BIST DRIN!</h1><div class="room">${me.icon} ${esc(me.name)}</div><p>Warte auf den Beamer …</p><div class="notice">Deine Anmeldung bleibt auch nach einem Refresh erhalten.</div></section>`;
+  updateHeaderReset();
 }
 function playerMessage(m){
   if(m.type==="host_state"){
+    const recvLocal=now();
+    if(typeof m.s.hostNow==="number"){
+      const sample=m.s.hostNow-recvLocal;
+      clockOffset=clockOffset===null?sample:clockOffset+(sample-clockOffset)*0.3;
+    }
     state=m.s;
     if(me&&state.players[me.id]&&me.gameId!==state.gameId){me.gameId=state.gameId;savePlayer()}
+    const key=state.phase+":"+state.q+":"+state.gameId;
+    if(state.phase==="answers"&&key===lastRenderedKey&&document.getElementById("gv")){
+      // Bereits dieselbe Antwortphase angezeigt (z.B. weil nur ein anderer Spieler
+      // geantwortet hat) - kein destruktives Neurendern, damit Drag&Drop/Eingaben erhalten bleiben.
+      return;
+    }
+    lastRenderedKey=key;
     renderPlayer();
   }
   if(m.type==="typing"&&m.q===state.q){state.typingProgress=m.progress;renderPlayer()}
   if(m.type==="answer_ok"&&me&&m.id===me.id)showSaved();
-  if(m.type==="reset_game"||(m.type==="force_rejoin"&&me&&m.id===me.id)){forgetPlayer();me=null;renderJoin()}
+  if(m.type==="reset_game"||(m.type==="force_rejoin"&&me&&m.id===me.id)){forgetPlayer();me=null;lastRenderedKey=null;renderJoin()}
 }
 function sendAnswer(a){
-  const elapsed=Math.max(0,Math.min(state.questionDuration*1000,now()-state.questionStartedAt));
+  const elapsed=Math.max(0,Math.min(state.questionDuration*1000,now()+(clockOffset||0)-state.questionStartedAt));
   saveAnswer(a);broadcast({type:"answer",id:me.id,a,clientElapsedMs:elapsed});showSaved();
 }
 function showSaved(){
@@ -252,7 +355,7 @@ function startMobileClock(){
   let lastSecond=null;
   const loop=()=>{
     if(state.phase!=="answers")return;
-    const left=Math.max(0,state.questionDuration-Math.floor((now()-state.questionStartedAt)/1000));
+    const left=Math.max(0,state.questionDuration-Math.floor((now()+(clockOffset||0)-state.questionStartedAt)/1000));
     if(left!==lastSecond){
       lastSecond=left;
       const el=$("#mobilecount");
@@ -281,7 +384,58 @@ function fitViewport(){
 window.addEventListener("resize",()=>fitViewport());
 window.addEventListener("orientationchange",()=>fitViewport());
 
+// V8: echtes Drag & Drop (Pointer Events, funktioniert mit Maus und Touch) für die
+// "Reihenfolge"-Frage. `order` wird per Referenz mutiert, sodass der Aufrufer (renderPlayer)
+// beim Absenden immer den aktuellen Stand sieht.
+function setupSortDrag(container,order){
+  container.innerHTML=sortListHtml(order,true);
+  let dragEl=null,grabOffsetY=0;
+  const itemsArr=()=>Array.from(container.children);
+  function updateNumbers(){itemsArr().forEach((el,i)=>{el.dataset.i=i;const num=el.querySelector(".sort-num");if(num)num.textContent=(i+1)+"."})}
+  function syncOrderFromDom(){const vals=itemsArr().map(el=>el.querySelector(".sort-label").textContent);order.length=0;order.push(...vals)}
+  function down(e){
+    const handle=e.target.closest(".sort-handle");if(!handle)return;
+    const item=handle.closest(".sortitem");if(!item)return;
+    dragEl=item;
+    const rect=item.getBoundingClientRect();
+    grabOffsetY=e.clientY-rect.top;
+    item.classList.add("dragging");
+    try{item.setPointerCapture(e.pointerId)}catch{}
+    e.preventDefault();
+  }
+  function move(e){
+    if(!dragEl)return;
+    e.preventDefault();
+    dragEl.style.transform="";
+    const rect=dragEl.getBoundingClientRect();
+    const dy=(e.clientY-grabOffsetY)-rect.top;
+    dragEl.style.transform=`translateY(${dy}px)`;
+    const dragMid=rect.top+dy+rect.height/2;
+    const items=itemsArr();
+    const idx=items.indexOf(dragEl);
+    for(const el of items){
+      if(el===dragEl)continue;
+      const r=el.getBoundingClientRect();
+      const mid=r.top+r.height/2;
+      const elIdx=items.indexOf(el);
+      if(elIdx<idx&&dragMid<mid){container.insertBefore(dragEl,el);updateNumbers();break}
+      if(elIdx>idx&&dragMid>mid){container.insertBefore(dragEl,el.nextSibling);updateNumbers();break}
+    }
+  }
+  function up(){
+    if(dragEl){dragEl.classList.remove("dragging");dragEl.style.transform=""}
+    dragEl=null;
+    syncOrderFromDom();updateNumbers();
+    fitViewport();
+  }
+  container.addEventListener("pointerdown",down);
+  container.addEventListener("pointermove",move);
+  container.addEventListener("pointerup",up);
+  container.addEventListener("pointercancel",up);
+}
+
 function renderPlayer(){
+  updateHeaderReset();
   if(state.phase==="lobby"){renderWaiting();return}
   if(state.phase==="typing"){
     const q=questions[state.q],text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));
@@ -291,14 +445,12 @@ function renderPlayer(){
   }
   if(state.phase==="finished"){
     const p=state.players[me.id];
-    $("#app").innerHTML=`<section class="panel hero"><h1>🏆 FERTIG!</h1><p>${me.icon} ${esc(me.name)}</p><p>Dein Punktestand: <b>${p?p.score:"—"}</b></p><p>Danke fürs Mitspielen!</p><button class="btn dark reset-link" id="reidentify">🔄 Neu anmelden</button></section>`;
-    $("#reidentify").onclick=resetPlayerIdentity;
+    $("#app").innerHTML=`<section class="panel hero"><h1>🏆 FERTIG!</h1><p>${me.icon} ${esc(me.name)}</p><p>Dein Punktestand: <b>${p?p.score:"—"}</b></p><p>Die Siegerehrung läuft auf dem Beamer – schau hin! 🎬</p></section>`;
     return;
   }
   if(state.phase==="result"){
-    const p=state.players[me.id];
-    $("#app").innerHTML=`<section class="panel hero"><h1>🎞️ AUSWERTUNG</h1><p>${me.icon} ${esc(me.name)}</p><div class="reveal">${p?.roundPoints?`+${p.roundPoints} PUNKTE`:"Diese Runde keine Punkte"}<br>Gesamt: ${p?p.score:0}</div><p>Schau auf den Beamer für das Ranking.</p><button class="btn dark reset-link" id="reidentify">🔄 Neu anmelden</button></section>`;
-    $("#reidentify").onclick=resetPlayerIdentity;
+    const p=state.players[me.id],q=questions[state.q];
+    $("#app").innerHTML=`<section class="panel hero"><h1>🎞️ AUSWERTUNG</h1><p>${me.icon} ${esc(me.name)}</p><div class="reveal">${p?.roundPoints?`+${p.roundPoints} PUNKTE`:"Diese Runde keine Punkte"}<br>Gesamt: ${p?p.score:0}</div><p class="small">Richtige Antwort: ${solution(q)}</p>${q.fact?`<div class="fact">💡 ${esc(q.fact)}</div>`:""}<p>Schau auf den Beamer für das Ranking.</p></section>`;
     return;
   }
   if(state.phase!=="answers")return;
@@ -312,8 +464,8 @@ function renderPlayer(){
   });
   if(q.type==="sort"){
     let order=[...q.items];
-    const draw=()=>{$("#sortlist").innerHTML=order.map((x,i)=>`<button class="btn choice sortitem" data-i="${i}">${i+1}. ${esc(x)}</button>`).join("");document.querySelectorAll(".sortitem").forEach(b=>b.onclick=()=>{let i=+b.dataset.i;if(i<order.length-1){[order[i],order[i+1]]=[order[i+1],order[i]];draw();fitViewport()}})};
-    draw();$("#send").onclick=()=>sendAnswer(order);
+    setupSortDrag($("#sortlist"),order);
+    $("#send").onclick=()=>sendAnswer(order);
   }else if($("#send"))$("#send").onclick=()=>sendAnswer(q.type==="estimate"?Number($("#answer").value):$("#answer").value.trim());
   fitViewport();
   startMobileClock();
