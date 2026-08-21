@@ -368,6 +368,7 @@ function renderHost(){
     }
   }
   $("#app").innerHTML=`<section class="panel">${body}</section>`;
+  updateHeaderReset();
   if($("#start"))$("#start").onclick=()=>{state.q=0;startQuestion()};
   if($("#next"))$("#next").onclick=next;
   if($("#reset"))$("#reset").onclick=hostReset;
@@ -412,8 +413,24 @@ function confirmReset(){
 function updateHeaderReset(){
   const btn=document.getElementById("headerReset");
   if(!btn)return;
-  if(!isHost&&me){btn.hidden=false;btn.onclick=confirmReset}
-  else btn.hidden=true;
+  if(isHost){
+    btn.hidden=false;
+    btn.textContent="🔄 Quiz resetten";
+    btn.title="Quiz komplett zurücksetzen";
+    btn.onclick=confirmHostReset;
+  }else if(me){
+    btn.hidden=false;
+    btn.textContent="🔄 Neu anmelden";
+    btn.title="Neu anmelden";
+    btn.onclick=confirmReset;
+  }else{
+    btn.hidden=true;
+  }
+}
+function confirmHostReset(){
+  if(confirm("Quiz wirklich komplett zurücksetzen? Alle Spieler und Punktestände werden gelöscht.")){
+    hostReset();
+  }
 }
 function renderWaiting(){
   $("#app").innerHTML=`<section class="panel hero"><h1>✓ DU BIST DRIN!</h1><div class="room">${me.icon} ${esc(me.name)}</div><p>Warte auf den Beamer …</p><div class="notice">Deine Anmeldung bleibt auch nach einem Refresh erhalten.</div></section>`;
