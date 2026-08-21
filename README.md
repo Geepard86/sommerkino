@@ -1,7 +1,9 @@
-# Sommerkino Quiz 2000 – V6
+# Sommerkino Quiz – V6 fixed / slower reveal
 
-Fragen werden synchron Zeichen für Zeichen auf Beamer und Handys eingeblendet. Erst wenn die Frage vollständig ist, erscheinen automatisch die Antworten und der 20-Sekunden-Countdown startet.
-
-Die Auswertung startet automatisch, sobald alle aktuell verbundenen Spieler geantwortet haben oder der Timer 0 erreicht.
-
-Host-Sounds via Web Audio API: neuer Frage-Jingle, Antwortphasen-Sound, Countdown 5–1 und Auswertungs-Fanfare. Keine externen Audiodateien.
+Ablauf pro Frage:
+1. Die Frage wird synchron Zeichen für Zeichen eingeblendet.
+2. Die Einblendung läuft bewusst langsamer (~65 ms pro Zeichen).
+3. Wenn der letzte Buchstabe sichtbar ist, wartet das Quiz 2 Sekunden.
+4. Danach erscheinen automatisch die Antwortmöglichkeiten auf Beamer und Handys.
+5. Gleichzeitig startet der 20-Sekunden-Countdown.
+6. Wenn alle Spieler geantwortet haben oder der Timer 0 erreicht ist, folgt automatisch die Auswertung.

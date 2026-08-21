@@ -82,14 +82,14 @@ function startQuestion(){
   clearAnswerState();
   state.phase="typing";state.answers={};state.questionStartedAt=null;state.typingProgress=0;state.version++;
   broadcast({type:"host_state",s:publicState()});renderHost();soundNewQuestion();
-  const text=String(questions[state.q].q||""), total=Math.max(700,text.length*38), started=now();
+  const text=String(questions[state.q].q||""), total=Math.max(1000,text.length*65), started=now();
   const tick=()=>{
     if(state.phase!=="typing")return;
     const progress=Math.min(1,(now()-started)/total);
     state.typingProgress=progress;
     broadcast({type:"typing",q:state.q,progress});
     renderHost();
-    if(progress>=1){showAnswers();return}
+    if(progress>=1){state.typingProgress=1;renderHost();setTimeout(showAnswers,2000);return}
     requestAnimationFrame(tick);
   }; tick();
 }
