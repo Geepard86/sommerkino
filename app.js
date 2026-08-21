@@ -5,6 +5,9 @@ const sb=createClient(CFG.SUPABASE_URL,CFG.SUPABASE_PUBLISHABLE_KEY,{auth:{persi
 const ROOM="sommerkino:"+CFG.ROOM;
 const isHost=new URLSearchParams(location.search).get("host")===CFG.HOST_PASSWORD;
 const ICONS=["🏓","🐍","🍿","🦫","🦈","🎬","📼","📺","🛼","🪩","🍉","🕶️"];
+const PLAYER_KEY="sommerkino-player-v5";
+const ANSWER_KEY="sommerkino-answer-v5";
+
 let audioCtx=null;
 function audioInit(){if(!isHost)return;try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==="suspended")audioCtx.resume()}catch{}}
 function tone(freq,dur=.08,delay=0,type="square",gain=.035){if(!isHost||!audioCtx)return;const o=audioCtx.createOscillator(),g=audioCtx.createGain();o.type=type;o.frequency.value=freq;g.gain.setValueAtTime(0,audioCtx.currentTime+delay);g.gain.linearRampToValueAtTime(gain,audioCtx.currentTime+delay+.01);g.gain.exponentialRampToValueAtTime(.001,audioCtx.currentTime+delay+dur);o.connect(g).connect(audioCtx.destination);o.start(audioCtx.currentTime+delay);o.stop(audioCtx.currentTime+delay+dur+.02)}
@@ -13,18 +16,21 @@ function soundAnswers(){audioInit();tone(880,.07);tone(1175,.12,.08,"square",.04
 function soundResult(){audioInit();tone(523,.12);tone(659,.12,.12);tone(784,.16,.24);tone(1047,.28,.4,"triangle",.05)}
 function soundCountdown(n){if(n<=5&&n>0){audioInit();tone(n===1?880:520,.06)}}
 
+function genGameId(){return Date.now().toString(36)+Math.random().toString(36).slice(2,7)}
+
 let questions=[],channel=null,me=null,timer=null,countdownRAF=null;
-let state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0};
+let state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId()};
 
 const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const now=()=>Date.now();
 function status(x){$("#status").textContent=x}
-function playerStorage(){try{return JSON.parse(localStorage.getItem("sommerkino-player-v4")||"null")}catch{return null}}
-function savePlayer(){localStorage.setItem("sommerkino-player-v4",JSON.stringify(me))}
-function clearAnswerState(){if(me){localStorage.removeItem("sommerkino-answer-v4")}}
-function saveAnswer(a){localStorage.setItem("sommerkino-answer-v4",JSON.stringify({q:state.q,a}))}
-function savedAnswer(){try{let x=JSON.parse(localStorage.getItem("sommerkino-answer-v4")||"null");return x&&x.q===state.q?x.a:undefined}catch{return undefined}}
+function playerStorage(){try{return JSON.parse(localStorage.getItem(PLAYER_KEY)||"null")}catch{return null}}
+function savePlayer(){localStorage.setItem(PLAYER_KEY,JSON.stringify(me))}
+function forgetPlayer(){localStorage.removeItem(PLAYER_KEY);localStorage.removeItem(ANSWER_KEY)}
+function clearAnswerState(){localStorage.removeItem(ANSWER_KEY)}
+function saveAnswer(a){localStorage.setItem(ANSWER_KEY,JSON.stringify({q:state.q,a}))}
+function savedAnswer(){try{let x=JSON.parse(localStorage.getItem(ANSWER_KEY)||"null");return x&&x.q===state.q?x.a:undefined}catch{return undefined}}
 
 async function boot(){
   try{
@@ -52,7 +58,7 @@ function onMessage(m){if(isHost)hostMessage(m);else playerMessage(m)}
 
 function initHost(){channel.track({role:"host",name:"BEAMER"});renderHost();broadcast({type:"host_state",s:publicState()})}
 function publicState(){
-  return {phase:state.phase,q:state.q,questionStartedAt:state.questionStartedAt,questionDuration:state.questionDuration,typingProgress:state.typingProgress||0,
+  return {phase:state.phase,q:state.q,questionStartedAt:state.questionStartedAt,questionDuration:state.questionDuration,typingProgress:state.typingProgress||0,gameId:state.gameId,
     players:Object.fromEntries(Object.entries(state.players).map(([id,p])=>[id,{id:p.id,name:p.name,icon:p.icon,score:p.score,last:p.last,roundPoints:p.roundPoints,answerTime:p.answerTime}]))};
 }
 function hostMessage(m){
@@ -68,13 +74,15 @@ function hostMessage(m){
     const elapsed=Math.max(0,Math.min(state.questionDuration*1000,Number(m.clientElapsedMs)||0));
     state.answers[m.id]={a:m.a,elapsed};
     state.players[m.id].last=m.a;state.players[m.id].answerTime=elapsed;
-    if(Object.keys(state.players).length>0 && Object.keys(state.answers).length>=Object.keys(state.players).length)endQuestion();
     broadcast({type:"answer_ok",id:m.id});
-    renderHost();
+    if(Object.keys(state.players).length>0 && Object.keys(state.answers).length>=Object.keys(state.players).length)endQuestion();
+    else{broadcast({type:"host_state",s:publicState()});renderHost()}
   }
   if(m.type==="reconnect"){
-    if(state.players[m.p.id])broadcast({type:"host_state",s:publicState()});
-    else hostMessage({type:"join",p:m.p});
+    const p=m.p;if(!p?.id)return;
+    if(p.gameId!==state.gameId){broadcast({type:"force_rejoin",id:p.id});return}
+    if(state.players[p.id])broadcast({type:"host_state",s:publicState()});
+    else hostMessage({type:"join",p});
   }
   if(m.type==="leave"){delete state.players[m.id];delete state.answers[m.id];broadcast({type:"host_state",s:publicState()});renderHost()}
 }
@@ -83,11 +91,13 @@ function startQuestion(){
   state.phase="typing";state.answers={};state.questionStartedAt=null;state.typingProgress=0;state.version++;
   broadcast({type:"host_state",s:publicState()});renderHost();soundNewQuestion();
   const text=String(questions[state.q].q||""), total=Math.max(1000,text.length*65), started=now();
+  let lastN=-1;
   const tick=()=>{
     if(state.phase!=="typing")return;
     const progress=Math.min(1,(now()-started)/total);
     state.typingProgress=progress;
-    broadcast({type:"typing",q:state.q,progress});
+    const n=Math.floor(text.length*progress);
+    if(n!==lastN){lastN=n;broadcast({type:"typing",q:state.q,progress})}
     renderHost();
     if(progress>=1){state.typingProgress=1;renderHost();setTimeout(showAnswers,2000);return}
     requestAnimationFrame(tick);
@@ -96,11 +106,22 @@ function startQuestion(){
 function showAnswers(){
   if(state.phase!=="typing")return;
   state.phase="answers";state.answers={};state.questionStartedAt=now();state.typingProgress=1;state.version++;
-  broadcast({type:"host_state",s:publicState()});renderHost();soundAnswers();runCountdown();
+  broadcast({type:"host_state",s:publicState()});renderHost();soundAnswers();runHostCountdown();
 }
 function runHostCountdown(){
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
-  const loop=()=>{if(state.phase!=="answers")return;const left=Math.max(0,state.questionDuration-Math.floor((now()-state.questionStartedAt)/1000));const el=$("#hostcount");if(el)el.textContent=left;if(left<=0){endQuestion();return}countdownRAF=requestAnimationFrame(loop)};loop();
+  let lastSecond=null;
+  const loop=()=>{
+    if(state.phase!=="answers")return;
+    const left=Math.max(0,state.questionDuration-Math.floor((now()-state.questionStartedAt)/1000));
+    if(left!==lastSecond){
+      lastSecond=left;soundCountdown(left);
+      const el=$("#hostcount");
+      if(el){el.textContent=left;el.classList.remove("count-pulse");void el.offsetWidth;el.classList.add("count-pulse")}
+    }
+    if(left<=0){endQuestion();return}
+    countdownRAF=requestAnimationFrame(loop);
+  };loop();
 }
 function endQuestion(){
   if(state.phase!=="answers")return;
@@ -131,10 +152,26 @@ function next(){
   if(state.q>=questions.length-1){state.phase="finished";broadcast({type:"host_state",s:publicState()});renderHost();return}
   state.q++;startQuestion();
 }
-function hostReset(){state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0};broadcast({type:"host_state",s:publicState()});renderHost()}
+function hostReset(){
+  state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId()};
+  broadcast({type:"reset_game"});
+  broadcast({type:"host_state",s:publicState()});
+  renderHost();
+}
 function solution(q){if(q.type==="mc")return esc(q.options[q.answer]);if(q.type==="tf")return q.answer?"WAHR":"FALSCH";if(q.type==="sort")return q.answer.map(esc).join(" → ");return esc(String(q.answer)+(q.unit?" "+q.unit:""))}
 function ranking(){return Object.values(state.players).sort((a,b)=>b.score-a.score)}
 
+// Shared answer-area markup used identically on Beamer (host, non-interactive) and Handy (player, interactive)
+function answerAreaHtml(q,interactive){
+  const dis=interactive?"":"disabled";
+  if(q.type==="mc")return `<div class="answers">${q.options.map((o,i)=>`<button class="btn choice" data-a="${i}" ${dis}>${String.fromCharCode(65+i)}) ${esc(o)}</button>`).join("")}</div>`;
+  if(q.type==="tf")return `<div class="answers"><button class="btn choice" data-a="true" ${dis}>WAHR</button><button class="btn choice" data-a="false" ${dis}>FALSCH</button></div>`;
+  if(q.type==="estimate")return `<div class="answer-input-row"><input id="answer" type="number" step="0.1" placeholder="${esc(q.unit||"Wert")}" ${dis}>${interactive?'<button class="btn lime" id="send">ABSENDEN</button>':""}</div>`;
+  if(q.type==="emoji")return `<div class="answer-input-row"><input id="answer" placeholder="FILMTITEL" ${dis}>${interactive?'<button class="btn lime" id="send">ABSENDEN</button>':""}</div>`;
+  if(q.type==="who")return `<div class="hints">${q.hints.map((h,i)=>`<p class="small">Hinweis ${i+1}: ${esc(h)}</p>`).join("")}</div><div class="answer-input-row"><input id="answer" placeholder="WER BIN ICH?" ${dis}>${interactive?'<button class="btn lime" id="send">ABSENDEN</button>':""}</div>`;
+  if(q.type==="sort")return `<div id="sortlist" class="sortlist"></div>${interactive?'<button class="btn lime" id="send">REIHENFOLGE ABSENDEN</button>':""}`;
+  return "";
+}
 function placeholders(q){
   if(q.type==="mc")return `<div class="phase-placeholder">${[0,1,2,3].map(i=>`<div class="placeholder-answer">${String.fromCharCode(65+i)} · · ·</div>`).join("")}</div>`;
   if(q.type==="tf")return `<div class="phase-placeholder"><div class="placeholder-answer">WAHR · · ·</div><div class="placeholder-answer">FALSCH · · ·</div></div>`;
@@ -148,8 +185,9 @@ function renderHost(){
   }else if(state.phase==="typing"){
     const text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));
     body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question question-reveal">${esc(text.slice(0,n))}<span class="typing-cursor"></span></div><div class="notice">FRAGE WIRD EINGEBLENDET …</div></div>`;
-  }else if(state.phase==="question"){
-    body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question">${esc(q.q)}</div>${placeholders(q)}</div>`;
+  }else if(state.phase==="answers"){
+    const total=Object.keys(state.players).length,answered=Object.keys(state.answers).length;
+    body=`<div class="host-stage"><div class="answers-top"><span class="small">FRAGE ${state.q+1} / ${questions.length}</span><span class="host-count" id="hostcount">${state.questionDuration}</span></div><div class="question">${esc(q.q)}</div>${answerAreaHtml(q,false)}<p><span class="ready-chip">${answered} / ${total} GEANTWORTET</span></p></div>`;
   }else if(state.phase==="result"){
     const correct=players.filter(p=>p.roundPoints>0).sort((a,b)=>(a.answerTime??99999)-(b.answerTime??99999));
     const podium=correct.slice(0,3).map((p,i)=>`<div class="place ${i===0?"first":i===1?"second":"third"}"><div>${["🥇","🥈","🥉"][i]}</div><b>${p.icon} ${esc(p.name)}</b><br>+${p.roundPoints} P.</div>`).join("");
@@ -167,7 +205,7 @@ function rows(players,bars=false){
 }
 function renderJoinOrReconnect(){
   const saved=playerStorage();
-  if(saved?.id&&saved?.name){me=saved;joined=true;channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});broadcast({type:"reconnect",p:me});renderWaiting()}
+  if(saved?.id&&saved?.name){me=saved;channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});broadcast({type:"reconnect",p:me});renderWaiting()}
   else renderJoin();
 }
 function renderJoin(){
@@ -175,15 +213,25 @@ function renderJoin(){
   const iconButtons=ICONS.map((i,n)=>'<button class="btn '+(n===2?"pink":"")+'" data-icon="'+i+'"><span class="icon">'+i+'</span>'+i+'</button>').join("");
   $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME"><p>Dein Film-Maskottchen:</p><div class="grid">${iconButtons}</div><br><button class="btn lime" id="join">▶ BEITRETEN</button></section>`;
   document.querySelectorAll("[data-icon]").forEach(b=>b.onclick=()=>{selected=b.dataset.icon;document.querySelectorAll("[data-icon]").forEach(x=>x.classList.remove("pink"));b.classList.add("pink")});
-  $("#join").onclick=async()=>{const name=$("#name").value.trim();if(!name)return;me={id:crypto.randomUUID(),name,icon:selected};savePlayer();joined=true;await channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});await broadcast({type:"join",p:me});renderWaiting()};
+  $("#join").onclick=async()=>{const name=$("#name").value.trim();if(!name)return;me={id:crypto.randomUUID(),name,icon:selected,gameId:state.gameId};savePlayer();await channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});await broadcast({type:"join",p:me})};
+}
+function resetPlayerIdentity(){
+  if(me)broadcast({type:"leave",id:me.id});
+  forgetPlayer();me=null;renderJoin();
 }
 function renderWaiting(){
-  $("#app").innerHTML=`<section class="panel hero"><h1>✓ DU BIST DRIN!</h1><div class="room">${me.icon} ${esc(me.name)}</div><p>Warte auf den Beamer …</p><div class="notice">Deine Anmeldung bleibt auch nach einem Refresh erhalten.</div></section>`;
+  $("#app").innerHTML=`<section class="panel hero"><h1>✓ DU BIST DRIN!</h1><div class="room">${me.icon} ${esc(me.name)}</div><p>Warte auf den Beamer …</p><div class="notice">Deine Anmeldung bleibt auch nach einem Refresh erhalten.</div><button class="btn dark reset-link" id="reidentify">🔄 Nicht ich? Neu anmelden</button></section>`;
+  $("#reidentify").onclick=resetPlayerIdentity;
 }
 function playerMessage(m){
-  if(m.type==="host_state"){state=m.s;renderPlayer()}
+  if(m.type==="host_state"){
+    state=m.s;
+    if(me&&state.players[me.id]&&me.gameId!==state.gameId){me.gameId=state.gameId;savePlayer()}
+    renderPlayer();
+  }
   if(m.type==="typing"&&m.q===state.q){state.typingProgress=m.progress;renderPlayer()}
-  if(m.type==="answer_ok"&&m.id===me.id)showSaved()
+  if(m.type==="answer_ok"&&me&&m.id===me.id)showSaved();
+  if(m.type==="reset_game"||(m.type==="force_rejoin"&&me&&m.id===me.id)){forgetPlayer();me=null;renderJoin()}
 }
 function sendAnswer(a){
   const elapsed=Math.max(0,Math.min(state.questionDuration*1000,now()-state.questionStartedAt));
@@ -191,42 +239,83 @@ function sendAnswer(a){
 }
 function showSaved(){
   document.querySelectorAll("button,input").forEach(x=>x.disabled=true);
-  if(!$("#saved-banner"))$("#app .panel").insertAdjacentHTML("afterbegin",`<div class="saved-banner" id="saved-banner">✓ ANTWORT GESPEICHERT<br>SCHAU AUF DEN BEAMER</div>`);
+  if(!$("#saved-banner")){
+    const host=document.getElementById("gv")||document.querySelector("#app .panel");
+    if(host){
+      host.insertAdjacentHTML("afterbegin",`<div class="saved-banner" id="saved-banner">✓ ANTWORT GESPEICHERT<br>SCHAU AUF DEN BEAMER</div>`);
+      if(state.phase==="answers")fitViewport();
+    }
+  }
 }
 function startMobileClock(){
   if(countdownRAF)cancelAnimationFrame(countdownRAF);
+  let lastSecond=null;
   const loop=()=>{
     if(state.phase!=="answers")return;
     const left=Math.max(0,state.questionDuration-Math.floor((now()-state.questionStartedAt)/1000));
-    const el=$("#mobilecount");if(el)el.textContent=left;
+    if(left!==lastSecond){
+      lastSecond=left;
+      const el=$("#mobilecount");
+      if(el){el.textContent=left;el.classList.remove("count-pulse");void el.offsetWidth;el.classList.add("count-pulse")}
+    }
     if(left<=0){disableInputs();return}
     countdownRAF=requestAnimationFrame(loop);
   };loop();
 }
 function disableInputs(){document.querySelectorAll("button,input").forEach(x=>{if(x.dataset.a||x.id==="send"||x.classList.contains("sortitem"))x.disabled=true})}
+
+// Shrinks the whole game screen (question + answers + timer) as one unit until
+// it fits the visible viewport height without scrolling - works for any content length/device.
+function fitViewport(){
+  const vp=document.getElementById("gv");
+  if(!vp)return;
+  vp.style.setProperty("--fit-scale",1);
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const fits=s=>{vp.style.setProperty("--fit-scale",s);return vp.scrollHeight<=vp.clientHeight+1};
+    if(fits(1))return;
+    let lo=0.5,hi=1;
+    for(let i=0;i<10;i++){const mid=(lo+hi)/2;if(fits(mid))lo=mid;else hi=mid}
+    fits(lo);
+  }));
+}
+window.addEventListener("resize",()=>fitViewport());
+window.addEventListener("orientationchange",()=>fitViewport());
+
 function renderPlayer(){
   if(state.phase==="lobby"){renderWaiting();return}
-  if(state.phase==="question"){const q=questions[state.q];$("#app").innerHTML=`<section class="panel"><div class="player-question"><div class="qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="question">${esc(q.q)}</div></div>${placeholders(q)}<div class="notice">Warte auf den Beamer …</div></section>`;return}
-  if(state.phase==="typing"){const q=questions[state.q],text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));$("#app").innerHTML=`<section class="panel"><div class="player-question"><div class="qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="question question-reveal">${esc(text.slice(0,n))}<span class="typing-cursor"></span></div></div><div class="notice">FRAGE WIRD EINGEBLENDET …</div></section>`;return}
-  if(state.phase==="finished"){const p=state.players[me.id];$("#app").innerHTML=`<section class="panel hero"><h1>🏆 FERTIG!</h1><p>${me.icon} ${esc(me.name)}</p><p>Dein Punktestand: <b>${p?p.score:"—"}</b></p><p>Danke fürs Mitspielen!</p></section>`;return}
-  if(state.phase==="result"){const p=state.players[me.id];$("#app").innerHTML=`<section class="panel hero"><h1>🎞️ AUSWERTUNG</h1><p>${me.icon} ${esc(me.name)}</p><div class="reveal">${p?.roundPoints?`+${p.roundPoints} PUNKTE`:"Diese Runde keine Punkte"}<br>Gesamt: ${p?p.score:0}</div><p>Schau auf den Beamer für das Ranking.</p></section>`;return}
+  if(state.phase==="typing"){
+    const q=questions[state.q],text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));
+    $("#app").innerHTML=`<div class="game-viewport" id="gv"><div class="gv-qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="gv-question question-reveal">${esc(text.slice(0,n))}<span class="typing-cursor"></span></div><div class="notice">FRAGE WIRD EINGEBLENDET …</div></div>`;
+    fitViewport();
+    return;
+  }
+  if(state.phase==="finished"){
+    const p=state.players[me.id];
+    $("#app").innerHTML=`<section class="panel hero"><h1>🏆 FERTIG!</h1><p>${me.icon} ${esc(me.name)}</p><p>Dein Punktestand: <b>${p?p.score:"—"}</b></p><p>Danke fürs Mitspielen!</p><button class="btn dark reset-link" id="reidentify">🔄 Neu anmelden</button></section>`;
+    $("#reidentify").onclick=resetPlayerIdentity;
+    return;
+  }
+  if(state.phase==="result"){
+    const p=state.players[me.id];
+    $("#app").innerHTML=`<section class="panel hero"><h1>🎞️ AUSWERTUNG</h1><p>${me.icon} ${esc(me.name)}</p><div class="reveal">${p?.roundPoints?`+${p.roundPoints} PUNKTE`:"Diese Runde keine Punkte"}<br>Gesamt: ${p?p.score:0}</div><p>Schau auf den Beamer für das Ranking.</p><button class="btn dark reset-link" id="reidentify">🔄 Neu anmelden</button></section>`;
+    $("#reidentify").onclick=resetPlayerIdentity;
+    return;
+  }
   if(state.phase!=="answers")return;
   const q=questions[state.q],saved=savedAnswer();
-  let controls="";
-  if(q.type==="mc")controls=`<div class="answers">${q.options.map((o,i)=>"<button class=\"btn choice "+(saved===i?"answer-picked":"")+"\" data-a=\""+i+"\">"+String.fromCharCode(65+i)+") "+esc(o)+"</button>").join("")}</div>`;
-  if(q.type==="tf")controls=`<div class="answers"><button class="btn choice ${saved===true?"answer-picked":""}" data-a="true">WAHR</button><button class="btn choice ${saved===false?"answer-picked":""}" data-a="false">FALSCH</button></div>`;
-  if(q.type==="estimate")controls=`<input id="answer" type="number" step="0.1" placeholder="${q.unit||"Wert"}"><button class="btn lime" id="send">ABSENDEN</button>`;
-  if(q.type==="emoji")controls=`<input id="answer" placeholder="FILMTITEL"><button class="btn lime" id="send">ABSENDEN</button>`;
-  if(q.type==="who")controls=`<div>${q.hints.map((h,i)=>"<p class=\"small\">Hinweis "+(i+1)+": "+esc(h)+"</p>").join("")}</div><input id="answer" placeholder="WER BIN ICH?"><button class="btn lime" id="send">ABSENDEN</button>`;
-  if(q.type==="sort")controls=`<div id="sortlist"></div><button class="btn lime" id="send">REIHENFOLGE ABSENDEN</button>`;
-  $("#app").innerHTML=`<section class="panel"><div class="mobile-top"><span>⏱️ ZEIT</span><span class="count" id="mobilecount">20</span></div><div class="qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="question">${esc(q.q)}</div>${controls}</section>`;
+  const controls=answerAreaHtml(q,true);
+  $("#app").innerHTML=`<div class="game-viewport" id="gv"><div class="gv-top"><span>⏱️ ZEIT</span><span class="gv-count" id="mobilecount">${state.questionDuration}</span></div><div class="gv-qnum">FRAGE ${state.q+1}/${questions.length}</div><div class="gv-question">${esc(q.q)}</div><div class="gv-controls">${controls}</div></div>`;
   if(saved!==undefined)showSaved();
-  document.querySelectorAll("[data-a]").forEach(b=>b.onclick=()=>sendAnswer(b.dataset.a==="true"?true:b.dataset.a==="false"?false:Number(b.dataset.a)));
+  document.querySelectorAll("[data-a]").forEach(b=>{
+    if(saved===(b.dataset.a==="true"?true:b.dataset.a==="false"?false:Number(b.dataset.a)))b.classList.add("answer-picked");
+    b.onclick=()=>sendAnswer(b.dataset.a==="true"?true:b.dataset.a==="false"?false:Number(b.dataset.a));
+  });
   if(q.type==="sort"){
     let order=[...q.items];
-    const draw=()=>{$("#sortlist").innerHTML=order.map((x,i)=>`<button class="btn choice sortitem" data-i="${i}">${i+1}. ${esc(x)}</button>`).join("");document.querySelectorAll(".sortitem").forEach(b=>b.onclick=()=>{let i=+b.dataset.i;if(i<order.length-1){[order[i],order[i+1]]=[order[i+1],order[i]];draw()}})};
+    const draw=()=>{$("#sortlist").innerHTML=order.map((x,i)=>`<button class="btn choice sortitem" data-i="${i}">${i+1}. ${esc(x)}</button>`).join("");document.querySelectorAll(".sortitem").forEach(b=>b.onclick=()=>{let i=+b.dataset.i;if(i<order.length-1){[order[i],order[i+1]]=[order[i+1],order[i]];draw();fitViewport()}})};
     draw();$("#send").onclick=()=>sendAnswer(order);
   }else if($("#send"))$("#send").onclick=()=>sendAnswer(q.type==="estimate"?Number($("#answer").value):$("#answer").value.trim());
+  fitViewport();
   startMobileClock();
 }
 function showError(e){$("#app").innerHTML=`<section class="panel hero"><h1>⚠ CONNECTION ERROR</h1><p>${esc(e.message||e)}</p><button class="btn lime" onclick="location.reload()">RETRY</button></section>`;status("ERROR")}

@@ -2,7 +2,7 @@
 @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
 :root{--ink:#171414;--paper:#f3e4c3;--pink:#ff3f88;--cyan:#00e5ff;--lime:#baff42;--purple:#6237db;--red:#ff5c70}
 *{box-sizing:border-box}html,body{margin:0;min-height:100%;background:#101010;color:var(--paper)}
-body{font-family:VT323,monospace;font-size:23px;background-image:radial-gradient(#333 1px,transparent 1px);background-size:6px 6px}
+body{font-family:VT323,monospace;font-size:23px;background-image:radial-gradient(#333 1px,transparent 1px);background-size:6px 6px;overscroll-behavior-y:contain}
 .scanlines{position:fixed;inset:0;pointer-events:none;z-index:100;background:repeating-linear-gradient(0deg,rgba(255,255,255,.025),rgba(255,255,255,.025) 1px,transparent 1px,transparent 4px)}
 header{height:66px;padding:12px 22px;display:flex;align-items:center;justify-content:space-between;background:#080808;border-bottom:5px solid var(--pink);position:sticky;top:0;z-index:10}
 .brand{font:16px 'Press Start 2P';color:var(--cyan);text-shadow:3px 3px var(--purple)}.brand span{color:var(--pink)}
@@ -16,7 +16,7 @@ input{width:100%;padding:14px;border:4px solid #000;font:inherit;background:#fff
 button{font:inherit}.btn{border:4px solid #000;background:var(--cyan);color:#000;padding:13px 18px;cursor:pointer;box-shadow:5px 5px 0 #000}.btn:hover{transform:translate(2px,2px);box-shadow:3px 3px 0 #000}.btn:disabled{opacity:.5;cursor:default}
 .btn.lime{background:var(--lime)}.btn.pink{background:var(--pink)}.btn.dark{background:#222;color:var(--paper)}
 .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.icon{font-size:40px;display:block}
-.answers{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}.choice{min-height:96px;text-align:left;background:#fff;font-size:25px}
+.answers{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:22px}.choice{min-height:96px;text-align:left;background:#fff;font-size:25px;display:flex;align-items:center}
 .question{font:25px/1.55 'Press Start 2P';margin:20px 0}.qnum{color:var(--purple);font-weight:bold}.timer{font:46px 'Press Start 2P';text-align:center;color:var(--pink)}
 .row{display:flex;align-items:center;gap:12px;padding:11px;border-bottom:3px dashed #777}.score{margin-left:auto;color:var(--purple);font-size:28px}.rank{width:42px;font-family:'Press Start 2P'}
 .progress{height:22px;background:#222;border:3px solid #000;margin:10px 0}.progress i{display:block;height:100%;background:var(--pink)}
@@ -28,7 +28,7 @@ footer{text-align:center;color:#777;padding:20px}
 /* V4: Kahoot-style live state */
 .mobile-top{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;justify-content:space-between;background:#111;color:var(--paper);border:4px solid #000;padding:9px 11px;margin:-2px -2px 16px}
 .mobile-top .count{font:28px 'Press Start 2P';color:var(--pink)}
-.saved-banner{background:var(--lime);color:#000;border:4px solid #000;padding:10px;font-family:'Press Start 2P';font-size:13px;text-align:center;margin-bottom:14px}
+.saved-banner{background:var(--lime);color:#000;border:4px solid #000;padding:.5em;font-family:'Press Start 2P';font-size:.55em;text-align:center;margin-bottom:.6em;flex:0 0 auto}
 .answer-picked{outline:6px solid var(--pink);transform:translate(2px,2px);box-shadow:3px 3px 0 #000}
 .answer-locked{opacity:.5;cursor:default}
 .phase-card{text-align:center;padding:30px 12px;border:4px dashed #000;background:#e2d5b5}
@@ -48,6 +48,7 @@ footer{text-align:center;color:#777;padding:20px}
 .host-stage .question{font-size:31px}
 .host-count{font:62px 'Press Start 2P';color:var(--pink);text-align:center;margin:15px}
 .ready-chip{display:inline-block;padding:7px 10px;background:#000;color:var(--lime);border:3px solid #000}
+.answers-top{display:flex;align-items:center;justify-content:space-between}
 @media(max-width:700px){.mobile-top{margin:-2px -2px 12px}.mobile-top .count{font-size:21px}.saved-banner{font-size:11px}.podium{grid-template-columns:1fr}.host-stage .question{font-size:20px}}
 
 .phase-placeholder{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:20px 0}
@@ -62,3 +63,34 @@ footer{text-align:center;color:#777;padding:20px}
 .question-reveal{min-height:3.2em}
 .count-pulse{animation:pulse .35s ease}
 @keyframes pulse{50%{transform:scale(1.18)}}
+
+/* V6: fullscreen no-scroll game viewport for the answering phase (mobile + typing) */
+.game-viewport{
+  height:100svh;height:100dvh;
+  width:100%;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  box-sizing:border-box;
+  padding:.55em .6em;
+  gap:.4em;
+  background:var(--paper);
+  color:var(--ink);
+  border-top:6px solid #000;
+  font-size:calc(21px * var(--fit-scale,1));
+}
+.gv-top{flex:0 0 auto;display:flex;align-items:center;justify-content:space-between;background:#111;color:var(--paper);border:.18em solid #000;padding:.35em .5em;font-size:1em}
+.gv-top .gv-count{font:1.2em 'Press Start 2P';color:var(--pink)}
+.gv-qnum{flex:0 0 auto;color:var(--purple);font-weight:bold;font-size:.9em}
+.gv-question{flex:0 1 auto;font:1.05em/1.35 'Press Start 2P';margin:0;min-height:0}
+.gv-controls{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.gv-controls .answers{flex:1 1 auto;min-height:0;grid-auto-rows:1fr;margin-top:0;gap:.5em}
+.gv-controls .choice{min-height:0;font-size:.85em;padding:.5em .7em;justify-content:center;text-align:center}
+.gv-controls .answer-input-row{display:flex;flex-direction:column;gap:.5em;margin-top:.3em}
+.gv-controls .answer-input-row input{font-size:.9em;padding:.5em;margin:0}
+.gv-controls .hints p{font-size:.75em;margin:.2em 0}
+.gv-controls .sortlist{display:flex;flex-direction:column;gap:.35em;flex:1;min-height:0}
+.gv-controls .sortlist .choice{font-size:.8em;padding:.4em .6em}
+@media(min-width:701px){.game-viewport{max-width:640px;margin:0 auto;border-left:6px solid #000;border-right:6px solid #000}}
+
+.reset-link{margin-top:1.2em;font-size:.7em;opacity:.75}
