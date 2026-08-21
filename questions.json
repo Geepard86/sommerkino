@@ -94,15 +94,15 @@
     "answer": 4109,
     "unit": "Minuten",
     "fact": "Das sind 68 Stunden und 29 Minuten Film – also fast drei volle Tage Nonstop-Kino. Trailer, Pausen, Grillen und sonstiger Sommerkino-Wahnsinn sind noch nicht mitgerechnet."
-  },´
+  },
   {
     "type": "estimate",
     "q": "Wie viele Drehbücher sollen Brendan Fraser nach seinem Oscar-Gewinn für The Whale angeboten worden sein, bevor er sich für Rental Family entschied?",
     "answer": 70,
     "unit": "Drehbücher",
     "fact": "Er wählte gezielt eine kleine, persönliche Geschichte statt eines großen Blockbusters."
-  }
-    {
+  },
+  {
     "type": "mc",
     "q": "Wer trug nicht die „Marty Supreme“-Jacke zu Werbezwecken?",
     "options": [
@@ -113,7 +113,7 @@
     ],
     "answer": 3
   },
-    {
+  {
     "type": "mc",
     "q": "Welche überraschende Besetzung findet man bereits in „Anaconda“ von 1997, auf den das 2026er Sommerkino-Programm mit „Anaconda“ zurückblickt?",
     "options": [
@@ -123,5 +123,5 @@
       "Denzel Washington, Wesley Snipes und Bruce Willis"
     ],
     "answer": 1
-  },
+  }
 ]
