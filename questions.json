@@ -73,7 +73,12 @@
   {
     "type": "emoji",
     "q": "🦫☣️🌊🧟 Welcher Film lief 2017 beim Sommerkino?",
-    "answer": "Zombiber"
+    "answer": "Zombiber",
+    "answers": [
+      "Zombiber",
+      "Zom Bieber",
+      "Zombieber"
+    ]
   },
   {
     "type": "who",

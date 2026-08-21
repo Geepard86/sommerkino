@@ -116,3 +116,31 @@ footer{text-align:center;color:#777;padding:20px}
 .cplace.second.revealed{background:#ddd}
 .cplace.first.revealed{background:var(--lime);font-size:20px;padding:22px}
 @media(max-width:700px){.cplace{font-size:13px;padding:12px}.cplace.first.revealed{font-size:16px}}
+
+/* V9: kompakteres Mobile-Quiz – Frage und Antwortbuttons bleiben eher auf einem Screen. */
+.game-viewport{
+  min-height:calc(100dvh - 82px);
+  height:calc(100dvh - 82px);
+  overflow:hidden;
+  transform:scale(var(--fit-scale,1));
+  transform-origin:top center;
+}
+@media(max-width:700px){
+  body{font-size:20px}
+  main{max-width:100%;margin:8px auto;padding:5px}
+  .panel{padding:12px;border-width:4px;box-shadow:6px 6px 0 var(--purple)}
+  .hero h1{font-size:18px;line-height:1.25;margin:5px 0 14px}
+  .question{font-size:16px;line-height:1.3;margin:12px 0}
+  .gv-question{font-size:clamp(15px,4.2vw,19px);line-height:1.25;margin:8px 0 10px}
+  .gv-qnum{font-size:14px}
+  .answers{gap:8px;margin-top:10px}
+  .choice{min-height:64px;font-size:19px;padding:8px 10px}
+  .btn{border-width:3px;padding:9px 12px;box-shadow:4px 4px 0 #000}
+  .answer-input-row{gap:7px}
+  .answer-input-row input{padding:9px;border-width:3px}
+  .answer-input-row .btn{padding:9px 10px}
+  .grid{gap:7px}
+  .icon-btn{padding:8px 3px;min-height:48px}
+  .icon{font-size:25px}
+  footer{padding:10px;font-size:15px}
+}

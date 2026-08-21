@@ -4,9 +4,10 @@ const {createClient}=supabase;
 const sb=createClient(CFG.SUPABASE_URL,CFG.SUPABASE_PUBLISHABLE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
 const ROOM="sommerkino:"+CFG.ROOM;
 const isHost=new URLSearchParams(location.search).get("host")===CFG.HOST_PASSWORD;
-const ICONS=["🏓","🐍","🍿","🦫","🦈","🎬","📼","📺","🛼","🪩","🍉","🕶️"];
+const ICONS=["🏓","🐍","🍿","🐻","🦫","🦈","🪰","🎬","📽️","🎞️","🎟️","📺","📼","📷","🛹","🚐","🌵","📹","👻","💀","👄"];
 const PLAYER_KEY="sommerkino-player-v5";
 const ANSWER_KEY="sommerkino-answer-v5";
+const HOST_STATE_KEY="sommerkino-host-state-v1";
 
 let audioCtx=null;
 function audioInit(){if(!isHost)return;try{audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)();if(audioCtx.state==="suspended")audioCtx.resume()}catch{}}
@@ -38,6 +39,35 @@ function forgetPlayer(){localStorage.removeItem(PLAYER_KEY);localStorage.removeI
 function clearAnswerState(){localStorage.removeItem(ANSWER_KEY)}
 function saveAnswer(a){localStorage.setItem(ANSWER_KEY,JSON.stringify({q:state.q,a}))}
 function savedAnswer(){try{let x=JSON.parse(localStorage.getItem(ANSWER_KEY)||"null");return x&&x.q===state.q?x.a:undefined}catch{return undefined}}
+function saveHostState(){
+  if(!isHost)return;
+  try{
+    localStorage.setItem(HOST_STATE_KEY,JSON.stringify({
+      phase:state.phase,q:state.q,players:state.players,questionStartedAt:state.questionStartedAt,
+      questionDuration:state.questionDuration,version:state.version,gameId:state.gameId,
+      ceremonyStep:state.ceremonyStep||0,typingProgress:state.typingProgress||0
+    }));
+  }catch{}
+}
+function loadHostState(){
+  if(!isHost)return false;
+  try{
+    const saved=JSON.parse(localStorage.getItem(HOST_STATE_KEY)||"null");
+    if(!saved?.gameId||!saved?.phase)return false;
+    state={
+      phase:saved.phase,q:Number(saved.q)||0,players:saved.players||{},answers:{},
+      questionStartedAt:saved.questionStartedAt||null,questionDuration:Number(saved.questionDuration)||20,
+      version:Number(saved.version)||0,gameId:saved.gameId,ceremonyStep:Number(saved.ceremonyStep)||0,
+      typingProgress:Number(saved.typingProgress)||0
+    };
+    return true;
+  }catch{return false}
+}
+function clearHostState(){try{localStorage.removeItem(HOST_STATE_KEY)}catch{}}
+function availableIcons(exceptId=null){
+  const used=new Set(Object.values(state.players).filter(p=>p.id!==exceptId).map(p=>p.icon));
+  return ICONS.filter(icon=>!used.has(icon));
+}
 
 async function boot(){
   try{
@@ -96,7 +126,22 @@ function initResync(){
   window.addEventListener("online",()=>resync());
 }
 
-function initHost(){channel.track({role:"host",name:"BEAMER"});renderHost();broadcast({type:"host_state",s:publicState()})}
+function initHost(){
+  channel.track({role:"host",name:"BEAMER"});
+  const restored=loadHostState();
+  renderHost();
+  broadcast({type:"host_state",s:publicState()});
+  if(restored){
+    if(state.phase==="typing"){
+      const q=questions[state.q];
+      if(q)startQuestion(true);
+    }else if(state.phase==="answers"){
+      const elapsed=state.questionStartedAt?now()-state.questionStartedAt:0;
+      if(elapsed>=state.questionDuration*1000)endQuestion();
+      else runHostCountdown();
+    }
+  }
+}
 function publicState(){
   return {phase:state.phase,q:state.q,questionStartedAt:state.questionStartedAt,questionDuration:state.questionDuration,typingProgress:state.typingProgress||0,gameId:state.gameId,ceremonyStep:state.ceremonyStep||0,hostNow:now(),
     players:Object.fromEntries(Object.entries(state.players).map(([id,p])=>[id,{id:p.id,name:p.name,icon:p.icon,score:p.score,last:p.last,roundPoints:p.roundPoints,answerTime:p.answerTime}]))};
@@ -105,7 +150,14 @@ function hostMessage(m){
   if(m.type==="join"){
     const p=m.p;if(!p?.id||!p?.name)return;
     const old=state.players[p.id];
-    state.players[p.id]={id:p.id,name:String(p.name).slice(0,18),icon:p.icon||"🍿",score:old?.score||0,last:old?.last,roundPoints:0,answerTime:old?.answerTime};
+    const requestedIcon=p.icon||"🍿";
+    const iconTaken=Object.values(state.players).some(x=>x.id!==p.id&&x.icon===requestedIcon);
+    if(iconTaken){
+      broadcast({type:"join_rejected",id:p.id,reason:"ICON_TAKEN"});
+      return;
+    }
+    state.players[p.id]={id:p.id,name:String(p.name).slice(0,18),icon:requestedIcon,score:old?.score||0,last:old?.last,roundPoints:0,answerTime:old?.answerTime};
+    saveHostState();
     broadcast({type:"host_state",s:publicState()});renderHost();
   }
   if(m.type==="answer"){
@@ -124,18 +176,23 @@ function hostMessage(m){
     if(state.players[p.id])broadcast({type:"host_state",s:publicState()});
     else hostMessage({type:"join",p});
   }
-  if(m.type==="leave"){delete state.players[m.id];delete state.answers[m.id];broadcast({type:"host_state",s:publicState()});renderHost()}
+  if(m.type==="leave"){delete state.players[m.id];delete state.answers[m.id];saveHostState();broadcast({type:"host_state",s:publicState()});renderHost()}
 }
-function startQuestion(){
+function startQuestion(resume=false){
   clearAnswerState();
-  state.phase="typing";state.answers={};state.questionStartedAt=null;state.typingProgress=0;state.version++;
+  const text=String(questions[state.q].q||"");
+  const total=Math.max(1000,text.length*65);
+  const initialProgress=resume?Math.min(1,Math.max(0,Number(state.typingProgress)||0)):0;
+  state.phase="typing";state.answers={};state.questionStartedAt=null;state.typingProgress=initialProgress;state.version++;
+  saveHostState();
   broadcast({type:"host_state",s:publicState()});renderHost();soundNewQuestion();
-  const text=String(questions[state.q].q||""), total=Math.max(1000,text.length*65), started=now();
+  const started=now()-Math.round(initialProgress*total);
   let lastN=-1;
   const tick=()=>{
     if(state.phase!=="typing")return;
     const progress=Math.min(1,(now()-started)/total);
     state.typingProgress=progress;
+    saveHostState();
     const n=Math.floor(text.length*progress);
     if(n!==lastN){lastN=n;broadcast({type:"typing",q:state.q,progress})}
     renderHost();
@@ -145,7 +202,8 @@ function startQuestion(){
 }
 function showAnswers(){
   if(state.phase!=="typing")return;
-  state.phase="answers";state.answers={};state.questionStartedAt=now();state.typingProgress=1;state.version++;
+  state.phase="answers";state.answers={};state.questionStartedAt=state.questionStartedAt||now();state.typingProgress=1;state.version++;
+  saveHostState();
   broadcast({type:"host_state",s:publicState()});renderHost();soundAnswers();runHostCountdown();
 }
 function runHostCountdown(){
@@ -192,21 +250,56 @@ function endQuestion(){
     });
   }
   state.phase="result";state.questionStartedAt=null;state.version++;
+  saveHostState();
   broadcast({type:"host_state",s:publicState()});renderHost();soundResult();
+}
+function normalizeAnswer(value){
+  return String(value??"")
+    .normalize("NFD").replace(/[\\u0300-\\u036f]/g,"")
+    .toLowerCase()
+    .replace(/ß/g,"ss")
+    .replace(/[^a-z0-9]/g,"");
+}
+function levenshtein(a,b){
+  const prev=Array.from({length:b.length+1},(_,i)=>i);
+  for(let i=1;i<=a.length;i++){
+    const cur=[i];
+    for(let j=1;j<=b.length;j++){
+      cur[j]=Math.min(cur[j-1]+1,prev[j]+1,prev[j-1]+(a[i-1]===b[j-1]?0:1));
+    }
+    for(let j=0;j<cur.length;j++)prev[j]=cur[j];
+  }
+  return prev[b.length];
+}
+function fuzzyTextMatch(input,expected){
+  const a=normalizeAnswer(input),b=normalizeAnswer(expected);
+  if(!a||!b)return false;
+  if(a===b)return true;
+  const distance=levenshtein(a,b);
+  // Kleine Tipp-/Leerzeichenfehler erlauben; bei längeren Antworten etwas mehr.
+  const maxDistance=b.length<=5?1:b.length<=10?2:3;
+  return distance<=maxDistance;
+}
+function textAnswers(q){
+  const values=Array.isArray(q.answers)?q.answers:[q.answer];
+  return values.filter(v=>typeof v==="string");
 }
 function isCorrect(q,a){
   if(q.type==="mc"||q.type==="tf")return a===q.answer;
   if(q.type==="estimate")return false;
-  if(q.type==="emoji"||q.type==="who")return String(a).trim().toLowerCase()===String(q.answer).trim().toLowerCase();
+  if(q.type==="emoji"||q.type==="who"){
+    return textAnswers(q).some(expected=>fuzzyTextMatch(a,expected));
+  }
   if(q.type==="sort")return JSON.stringify(a)===JSON.stringify(q.answer);
   return false;
 }
 function next(){
-  if(state.q>=questions.length-1){state.phase="finished";state.ceremonyStep=0;broadcast({type:"host_state",s:publicState()});renderHost();return}
+  if(state.q>=questions.length-1){state.phase="finished";state.ceremonyStep=0;saveHostState();broadcast({type:"host_state",s:publicState()});renderHost();return}
   state.q++;startQuestion();
 }
 function hostReset(){
-  state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId(),ceremonyStep:0};
+  state={phase:"lobby",q:0,players:{},answers:{},questionStartedAt:null,questionDuration:20,version:0,gameId:genGameId(),ceremonyStep:0,typingProgress:0};
+  saveHostState();
   broadcast({type:"reset_game"});
   broadcast({type:"host_state",s:publicState()});
   renderHost();
@@ -216,11 +309,12 @@ function ceremonyNext(){
   const slotsCount=[players[2],players[1],players[0]].filter(Boolean).length;
   if((state.ceremonyStep||0)<slotsCount){
     state.ceremonyStep=(state.ceremonyStep||0)+1;
+    saveHostState();
     broadcast({type:"host_state",s:publicState()});
     renderHost();soundResult();
   }
 }
-function solution(q){if(q.type==="mc")return esc(q.options[q.answer]);if(q.type==="tf")return q.answer?"WAHR":"FALSCH";if(q.type==="sort")return q.answer.map(esc).join(" → ");return esc(String(q.answer)+(q.unit?" "+q.unit:""))}
+function solution(q){if(q.type==="mc")return esc(q.options[q.answer]);if(q.type==="tf")return q.answer?"WAHR":"FALSCH";if(q.type==="sort")return q.answer.map(esc).join(" → ");if(q.type==="emoji"||q.type==="who")return esc(String(q.answer));return esc(String(q.answer)+(q.unit?" "+q.unit:""))}
 function ranking(){return Object.values(state.players).sort((a,b)=>b.score-a.score)}
 
 // Shared answer-area markup used identically on Beamer (host, non-interactive) and Handy (player, interactive)
@@ -287,12 +381,27 @@ function renderJoinOrReconnect(){
   if(saved?.id&&saved?.name){me=saved;channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});broadcast({type:"reconnect",p:me});renderWaiting()}
   else renderJoin();
 }
-function renderJoin(){
-  let selected="🍿";
-  const iconButtons=ICONS.map((i,n)=>'<button class="btn icon-btn '+(n===2?"pink":"")+'" data-icon="'+i+'"><span class="icon">'+i+'</span></button>').join("");
-  $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME"><p>Dein Film-Maskottchen:</p><div class="grid">${iconButtons}</div><br><button class="btn lime" id="join">▶ BEITRETEN</button></section>`;
-  document.querySelectorAll("[data-icon]").forEach(b=>b.onclick=()=>{selected=b.dataset.icon;document.querySelectorAll("[data-icon]").forEach(x=>x.classList.remove("pink"));b.classList.add("pink")});
-  $("#join").onclick=async()=>{const name=$("#name").value.trim();if(!name)return;me={id:crypto.randomUUID(),name,icon:selected,gameId:state.gameId};savePlayer();await channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});await broadcast({type:"join",p:me})};
+function renderJoin(message=""){
+  let selected=availableIcons()[0]||ICONS[0];
+  const used=new Set(Object.values(state.players).map(p=>p.icon));
+  const iconButtons=ICONS.map((i,n)=>{
+    const taken=used.has(i);
+    return '<button class="btn icon-btn '+(!taken&&i===selected?"pink":"")+'" data-icon="'+i+'" '+(taken?"disabled":"")+' title="'+(taken?"Bereits vergeben":"Verfügbar")+'"><span class="icon">'+i+'</span></button>';
+  }).join("");
+  $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME">${message?`<div class="notice">${esc(message)}</div>`:""}<p>Dein Film-Maskottchen:</p><div class="grid">${iconButtons}</div><br><button class="btn lime" id="join" ${availableIcons().length?"":"disabled"}>▶ BEITRETEN</button></section>`;
+  document.querySelectorAll("[data-icon]:not(:disabled)").forEach(b=>b.onclick=()=>{
+    selected=b.dataset.icon;
+    document.querySelectorAll("[data-icon]").forEach(x=>x.classList.remove("pink"));
+    b.classList.add("pink");
+  });
+  $("#join").onclick=async()=>{
+    const name=$("#name").value.trim();
+    if(!name)return;
+    me={id:crypto.randomUUID(),name,icon:selected,gameId:state.gameId};
+    savePlayer();
+    await channel.track({role:"player",id:me.id,name:me.name,icon:me.icon});
+    await broadcast({type:"join",p:me});
+  };
   updateHeaderReset();
 }
 function resetPlayerIdentity(){
@@ -315,6 +424,14 @@ function renderWaiting(){
   updateHeaderReset();
 }
 function playerMessage(m){
+  if(m.type==="join_rejected"){
+    if(m.id===me?.id&&m.reason==="ICON_TAKEN"){
+      forgetPlayer();
+      me=null;
+      renderJoin("Dieses Film-Maskottchen ist leider schon vergeben. Bitte wähle ein anderes.");
+    }
+    return;
+  }
   if(m.type==="host_state"){
     const recvLocal=now();
     if(typeof m.s.hostNow==="number"){
