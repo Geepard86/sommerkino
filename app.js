@@ -340,7 +340,7 @@ function renderHost(){
   const players=ranking(),q=questions[state.q];
   let body="";
   if(state.phase==="lobby"){
-    body=`<div class="hero host-stage"><h1>🎞️ SOMMERKINO<br>HOST</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p><span class="ready-chip">${players.length} SPIELER ONLINE</span></p><button class="btn lime" id="start">▶ QUIZ STARTEN</button><h2>TEILNEHMER</h2>${rows(players)}</div>`;
+    body=`<div class="hero host-stage"><h1>🎞️ SOMMERKINO<br>HOST</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><div class="host-qr"><img src="qr.png" alt="QR-Code zum Beitreten"><small>Mit dem Handy scannen und beitreten</small></div><p><span class="ready-chip">${players.length} SPIELER ONLINE</span></p><button class="btn lime" id="start">▶ QUIZ STARTEN</button><h2>TEILNEHMER</h2>${rows(players)}</div>`;
   }else if(state.phase==="typing"){
     const text=String(q.q||""),n=Math.floor(text.length*Math.min(1,Math.max(0,state.typingProgress||0)));
     body=`<div class="host-stage"><div class="small">FRAGE ${state.q+1} / ${questions.length}</div><div class="question question-reveal">${esc(text.slice(0,n))}<span class="typing-cursor"></span></div><div class="notice">FRAGE WIRD EINGEBLENDET …</div></div>`;
@@ -384,16 +384,12 @@ function renderJoinOrReconnect(){
 function renderJoin(message=""){
   let selected=availableIcons()[0]||ICONS[0];
   const used=new Set(Object.values(state.players).map(p=>p.icon));
-  const iconButtons=ICONS.map((i,n)=>{
+  const iconOptions=ICONS.map(i=>{
     const taken=used.has(i);
-    return '<button class="btn icon-btn '+(!taken&&i===selected?"pink":"")+'" data-icon="'+i+'" '+(taken?"disabled":"")+' title="'+(taken?"Bereits vergeben":"Verfügbar")+'"><span class="icon">'+i+'</span></button>';
+    return `<option value="${i}" ${!taken&&i===selected?"selected":""} ${taken?"disabled":""}>${i}${taken?" — vergeben":""}</option>`;
   }).join("");
-  $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME">${message?`<div class="notice">${esc(message)}</div>`:""}<p>Dein Film-Maskottchen:</p><div class="grid">${iconButtons}</div><br><button class="btn lime" id="join" ${availableIcons().length?"":"disabled"}>▶ BEITRETEN</button></section>`;
-  document.querySelectorAll("[data-icon]:not(:disabled)").forEach(b=>b.onclick=()=>{
-    selected=b.dataset.icon;
-    document.querySelectorAll("[data-icon]").forEach(x=>x.classList.remove("pink"));
-    b.classList.add("pink");
-  });
+  $("#app").innerHTML=`<section class="panel hero"><h1>📼 SOMMERKINO<br>QUIZ 2000</h1><p>RAUM</p><div class="room">${CFG.ROOM}</div><p>Wie heißt du?</p><input id="name" maxlength="18" placeholder="DEIN NAME">${message?`<div class="notice">${esc(message)}</div>`:""}<p>Dein Film-Maskottchen:</p><div class="icon-select-wrap"><select id="iconSelect" class="icon-select" aria-label="Film-Maskottchen">${iconOptions}</select></div><small class="icon-hint">Grau = bereits von einem anderen Spieler gewählt</small><br><button class="btn lime" id="join" ${availableIcons().length?"":"disabled"}>▶ BEITRETEN</button></section>`;
+  $("#iconSelect").onchange=()=>{selected=$("#iconSelect").value};
   $("#join").onclick=async()=>{
     const name=$("#name").value.trim();
     if(!name)return;
